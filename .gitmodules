@@ -1,0 +1,3 @@
+[submodule "vendor/gltf"]
+	path = vendor/gltf
+	url = https://github.com/KhronosGroup/glTF
