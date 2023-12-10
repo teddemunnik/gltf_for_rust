@@ -1,4 +1,3 @@
-
 use schemars::{schema::{SchemaObject, RootSchema}, visit::{Visitor, visit_schema_object}};
 use std::{fs::File, io::BufWriter};
 use std::io::BufReader;
@@ -6,22 +5,17 @@ use std::path::{Path, PathBuf};
 use schemars::visit::visit_root_schema;
 use quote::quote;
 use std::vec::Vec;
-use schemars::_private::NoSerialize;
 use schemars::schema::{InstanceType, Schema, SingleOrVec};
-use proc_macro2::{Ident, Span, Literal, TokenStream};
+use proc_macro2::{Ident, Span, TokenStream};
 use convert_case::{Case, Casing};
-use std::fmt::Display;
 use std::error::Error;
 use thiserror::Error;
-use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Error)]
 enum MyError {
     #[error("Failed to open schema")]
     FailedToOpenSchema(PathBuf),
-    #[error("Failed to resolve schema reference")]
-    FailedToResolveReference(PathBuf),
     #[error("Unhandled instance type")]
     UnhandledInstanceType(Option<SingleOrVec<InstanceType>>),
     #[error("Unhandled array item type")]
@@ -66,7 +60,9 @@ fn handle_type(schema_store: &SchemaStore, current_path: &PathBuf, schema: &Sche
         Some(SingleOrVec::Single(a)) => match **a{
             InstanceType::Null => Err(Box::new(MyError::UnhandledInstanceType(schema.instance_type.clone())) as Box<dyn Error>),
             InstanceType::Boolean => Ok(Some(Type::Boolean)),
-            InstanceType::Object => Ok(Some(Type::UntypedObject)),
+            InstanceType::Object => {
+                Ok(Some(Type::UntypedObject))
+            }
             InstanceType::Array => handle_array(schema_store, current_path, schema).map(|ok| Some(ok)),
             InstanceType::Number => Ok(Some(Type::Number)),
             InstanceType::String => Ok(Some(Type::String)),
@@ -145,37 +141,69 @@ fn schedule_types(open_types: &mut Vec<String>, closed_types: &HashSet<String>, 
     }
 }
 
+struct Property{
+    ty: Type,
+    optional: bool,
+    comment: Option<String>,
+}
+
+fn recursive_read_properties(properties: &mut HashMap<String, Property>, schema: &SchemaObject, schema_store: &SchemaStore, schema_path: &PathBuf){
+    // First read properties from 'base' schemas
+    let base_schema = schema.subschemas.as_ref().and_then(|subschema| subschema.all_of.as_ref()).and_then(|all_of| all_of.first());
+    if let Some(Schema::Object(base)) = base_schema{
+        let base = schema_store.resolve(schema_path, base);
+        recursive_read_properties(properties, base, schema_store, schema_path);
+    }
+
+    // Then add our own properties
+    let object_schema = schema.object.as_ref().unwrap();
+    for (name, field_schema) in object_schema.properties.iter(){
+        let field_schema = match field_schema{
+            Schema::Object(object) => object,
+            _ => unreachable!(),
+        };
+        let field_schema = schema_store.resolve(schema_path, field_schema);
+
+        let property = properties.entry(name.clone()).or_insert(Property{ ty: Type::Any, optional: true, comment: None});
+
+        match property.ty{
+            Type::Any => property.ty = handle_field(schema_store, schema_path, field_schema).unwrap(),
+            _ => (),
+        }
+
+        if property.comment.is_none(){
+            property.comment = field_schema.metadata.as_ref().and_then(|metadata| metadata.description.clone());
+        }
+        
+        if object_schema.required.contains(name){
+            property.optional = false;
+        }
+    }
+
+}
+
 fn write_rust(schema_store: &SchemaStore, schema_lookup: &HashMap<String, &SchemaObject>, schema_path: &PathBuf, schema: &SchemaObject, writer: &mut dyn std::io::Write, open_types: &mut Vec<String>, closed_types: &HashSet<String>){
     let metadata = schema.metadata.as_ref().unwrap();
     let comment = metadata.description.as_ref();
     let name = Ident::new(&metadata.title.as_ref().unwrap().replace(" ", ""), Span::call_site());
 
+    let mut properties = HashMap::new();
+    recursive_read_properties(&mut properties, schema, schema_store, schema_path);
+
     let mut property_tokens = Vec::new();
-    let object_schema = schema.object.as_ref().unwrap();
-    for (name, schema) in object_schema.properties.iter(){
-        let schema = match schema{
-            Schema::Object(object) => object,
-            _ => unreachable!(),
-        };
-        let schema = schema_store.resolve(schema_path, schema);
-
+    for (name, property) in properties.iter(){
         let rusty_name = name.to_case(Case::Snake).replace("type", "ty");
+        schedule_types(open_types, closed_types, &property.ty);
 
-        let ty = handle_field(schema_store, schema_path, schema).unwrap();
-        schedule_types(open_types, closed_types, &ty);
-
-        let optional = !object_schema.required.contains(name);
-
-        let rust_type = match (&ty , optional){
-            (Type::Array(_), true) => generate_rust_type(schema_store, schema_lookup, &ty),
-            (_, true) => { let rust_type : TokenStream = generate_rust_type(schema_store, schema_lookup,&ty); quote!{ Option::<#rust_type> } },
-            _ => generate_rust_type(schema_store, schema_lookup,&ty),
+        let rust_type = match (&property.ty , property.optional){
+            (Type::Array(_), true) => generate_rust_type(schema_store, schema_lookup, &property.ty),
+            (_, true) => { let rust_type : TokenStream = generate_rust_type(schema_store, schema_lookup,&property.ty); quote!{ Option::<#rust_type> } },
+            _ => generate_rust_type(schema_store, schema_lookup,&property.ty),
         };
 
-        let comment = schema.metadata.as_ref().map(|metadata| metadata.description.clone());
 
         let ident = Ident::new(&rusty_name, Span::call_site());
-        let docstring = comment.map(|x| quote!{ #[doc=#x] });
+        let docstring = property.comment.as_ref().map(|x| quote!{ #[doc=#x] });
         property_tokens.push(quote!{
             #[serde(rename = #name)]
             #docstring
@@ -234,9 +262,9 @@ impl SchemaStore{
 
     fn read<P: AsRef<Path>+Clone>(&mut self, path: P) -> Result<(), Box<dyn Error>> where PathBuf: From<P>{
         // Read the requested schema
-        let file = File::open(path.clone()).map_err(|e| MyError::FailedToOpenSchema(PathBuf::from(path.clone())))?;
+        let file = File::open(path.clone()).map_err(|_| MyError::FailedToOpenSchema(PathBuf::from(path.clone())))?;
         let reader = BufReader::new(file);
-        let mut root_schema = serde_json::from_reader(reader).map_err(|e| MyError::FailedToOpenSchema(PathBuf::from(path.clone())))?;
+        let mut root_schema = serde_json::from_reader(reader).map_err(|_| MyError::FailedToOpenSchema(PathBuf::from(path.clone())))?;
 
         // Read any requested subschema 
         let mut current_directory = PathBuf::from(path.clone());
@@ -264,12 +292,12 @@ fn main(){
     // Load the root schema
     schema_store.read_root("vendor\\gltf\\specification\\2.0\\schema\\glTF.schema.json").unwrap();
 
-    let mut output = File::create("output_bindings.rs").unwrap();
+    let output = File::create("output_bindings.rs").unwrap();
     let mut writer = BufWriter::new(output);
 
     // Build a map to lookup named types in the schemas
     let mut schema_lookup = HashMap::new();
-    for (path, schema) in schema_store.schemas.iter(){
+    for (_, schema) in schema_store.schemas.iter(){
 
         if let Some(id) = schema.schema.metadata.as_ref().and_then(|metadata| metadata.id.as_ref()){
             schema_lookup.insert(id.clone(), &schema.schema);
