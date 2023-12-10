@@ -27,9 +27,14 @@ struct Enum{
     options: Vec<String>,
 }
 
+struct ArrayType{
+    min_length: Option<u32>,
+    item: Box<Type>
+}
+
 enum Type{
     Any,
-    Array(Box<Type>),
+    Array(ArrayType),
     TypedObject(String),
     UntypedObject,
     String,
@@ -148,7 +153,7 @@ fn handle_type(schema: &SchemaContext) -> Result<Type, Box<dyn Error>>{
                     Ok(Some(Type::UntypedObject))
                 }
             }
-            InstanceType::Array => handle_array(schema).map(|ok| Some(ok)),
+            InstanceType::Array => Ok(Some(Type::Array(handle_array(schema)?))),
             InstanceType::Number => Ok(Some(Type::Number)),
             InstanceType::String => Ok(Some(Type::String)),
             InstanceType::Integer => Ok(Some(Type::Integer)),
@@ -170,8 +175,9 @@ fn handle_type(schema: &SchemaContext) -> Result<Type, Box<dyn Error>>{
     Ok(Type::Any)
 }
 
-fn handle_array(schema: &SchemaContext) -> Result<Type, Box<dyn Error>>{
+fn handle_array(schema: &SchemaContext) -> Result<ArrayType, Box<dyn Error>>{
     let array = schema.schema.array.as_ref().unwrap();
+
     match array.items.as_ref(){
       Some(SingleOrVec::Single(a)) => {
         match a.as_ref(){
@@ -181,15 +187,15 @@ fn handle_array(schema: &SchemaContext) -> Result<Type, Box<dyn Error>>{
                     match **instance_type{
                         InstanceType::Object => { 
                             return match object.schema.metadata.as_ref().and_then(|metadata| metadata.id.as_ref()){
-                                Some(id) => Ok(Type::Array(Box::new(Type::TypedObject(id.clone())))),
-                                _ => Ok(Type::Array(Box::new(Type::UntypedObject))),
+                                Some(id) => Ok(ArrayType{ item: Box::new(Type::TypedObject(id.clone())), min_length: array.min_items }),
+                                _ => Ok(ArrayType{ item: Box::new(Type::UntypedObject), min_length: array.min_items}),
                             }
                         },
                         _ => ()
                     }
                 }
 
-                return Ok(Type::Array(Box::new(handle_type(&object)?)));
+                return Ok(ArrayType{ item: Box::new(handle_type(&object)?), min_length: array.min_items });
             },
             _ => Err(Box::new(MyError::UnhandledArrayItemType)),
         }
@@ -201,7 +207,7 @@ fn handle_array(schema: &SchemaContext) -> Result<Type, Box<dyn Error>>{
 fn generate_rust_type(schema_lookup: &HashMap<String, SchemaContext>, ty: &Type, field_name: &String) -> TokenStream{
     match ty{
         Type::Any => quote!{ serde_json::Value },
-        Type::Array(item_type) => { let item_rust_type = generate_rust_type(schema_lookup, item_type, field_name); return quote!{ Vec::< #item_rust_type > }; },
+        Type::Array(array_type) => { let item_rust_type = generate_rust_type(schema_lookup, &array_type.item, field_name); return quote!{ Vec::< #item_rust_type > }; },
         Type::Boolean => quote!{ bool },
         Type::Integer => quote!{ i64 },
         Type::Number => quote!{ f64 },
@@ -219,7 +225,7 @@ fn generate_rust_type(schema_lookup: &HashMap<String, SchemaContext>, ty: &Type,
 
 fn schedule_types(open_types: &mut Vec<String>, closed_types: &HashSet<String>, ty: &Type){
     match ty{
-        Type::Array(item_ty) => schedule_types(open_types, closed_types, item_ty.as_ref()),
+        Type::Array(array_type) => schedule_types(open_types, closed_types, array_type.item.as_ref()),
         Type::TypedObject(id) => {
             if !closed_types.contains(id) && !open_types.contains(id){
                 open_types.push(id.clone());
@@ -291,8 +297,14 @@ fn write_rust(schema_lookup: &HashMap<String, SchemaContext>, schema: &SchemaCon
         let rusty_name = name.to_case(Case::Snake).replace("type", "ty");
         schedule_types(open_types, closed_types, &property.ty);
 
+        
+
+        
+
         let rust_type = match (&property.ty , property.optional){
-            (Type::Array(_), true) => generate_rust_type(schema_lookup, &property.ty, name),
+            // Remove the Option for optional Vec's with a minimum length of 1
+            // This way we can guarantee this invariant by telling serde to not serialize zero length vecs.
+            (Type::Array(array_type), true) if array_type.min_length.is_some() && array_type.min_length.unwrap() == 1 => generate_rust_type(schema_lookup, &property.ty, name),
             (_, true) => { let rust_type : TokenStream = generate_rust_type(schema_lookup,&property.ty, name); quote!{ Option::<#rust_type> } },
             _ => generate_rust_type(schema_lookup,&property.ty, name),
         };
