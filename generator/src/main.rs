@@ -342,8 +342,7 @@ fn write_rust(schema_lookup: &HashMap<String, SchemaContext>, schema: &SchemaCon
 
             let default_declaration = property.default.as_ref().map(|_| quote!{ #[derive(Default)] });
             embedded_enums.push(quote!{
-                #[derive(Serialize, Deserialize)]
-                #[serde(untagged)]
+                #[derive(Serialize, Deserialize, Debug)]
                 #default_declaration
                 enum #rusty_enum_name{
                     #(#enum_options),*
@@ -383,13 +382,13 @@ fn write_rust(schema_lookup: &HashMap<String, SchemaContext>, schema: &SchemaCon
     let mod_name = Ident::new(&metadata.title.as_ref().unwrap().replace(" ", "").to_lowercase(), Span::call_site());
 
     write!(writer, "{}", quote!{
-        mod #mod_name{
+        pub mod #mod_name{
             use serde::{Serialize, Deserialize};
             use serde_json::{Map, Value};
 
             #(#embedded_enums)*
 
-            #[derive(Serialize, Deserialize)]
+            #[derive(Serialize, Deserialize, Debug)]
             #doc
             pub struct #name{
                 #(#property_tokens),*
@@ -457,7 +456,7 @@ fn main(){
     // Load the root schema
     schema_store.read_root("vendor\\gltf\\specification\\2.0\\schema\\glTF.schema.json").unwrap();
 
-    let output = File::create("gltf_for_rust\\src\\lib.rs").unwrap();
+    let output = File::create("gltf_for_rust\\src\\generated.rs").unwrap();
     let mut writer = BufWriter::new(output);
 
     // Build a map to lookup named types in the schemas
