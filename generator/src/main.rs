@@ -94,14 +94,18 @@ fn handle_field(schema: &SchemaContext) -> Result<Type, Box<dyn Error>>{
         }
     }
 
-    if let Some(enumeration) = try_match_enum(schema){
+    if let Some(enumeration) = try_match_string_enum(schema){
         return Ok(Type::Enum(enumeration));
+    }
+
+    if try_match_int_enum(schema).is_some(){
+        return Ok(Type::Integer);
     }
 
     handle_type(schema)
 }
 
-fn try_match_enum(schema: &SchemaContext) -> Option<Enum>{
+fn try_match_string_enum(schema: &SchemaContext) -> Option<Enum>{
     let any_of = match schema.schema.subschemas.as_ref().and_then(|subschema| subschema.any_of.as_ref()){
         Some(any_of) => any_of,
         _ => return None,
@@ -138,6 +142,45 @@ fn try_match_enum(schema: &SchemaContext) -> Option<Enum>{
     }
 
     Some(Enum { options })
+}
+
+fn try_match_int_enum(schema: &SchemaContext) -> Option<()>{
+    let any_of = match schema.schema.subschemas.as_ref().and_then(|subschema| subschema.any_of.as_ref()){
+        Some(any_of) => any_of,
+        _ => return None,
+    };
+
+    let mut options = Vec::new();
+    for option in any_of{
+        let option = match option{
+            Schema::Object(object) => object,
+            _ => return None,
+        };
+
+        let is_number_constant = match option.const_value.as_ref(){
+            Some(Value::Number(option)) => {
+                options.push(option.clone());
+                true
+            }
+            _ => false,
+        };
+
+        let is_number = match option.instance_type.as_ref(){
+            Some(SingleOrVec::Single(single)) => {
+                match single.as_ref(){
+                    InstanceType::Integer => true,
+                    _ => false
+                }
+            },
+            _ => false
+        };
+
+        if !is_number && !is_number_constant{
+            return None;
+        }
+    }
+
+    Some(())
 }
 
 fn handle_type(schema: &SchemaContext) -> Result<Type, Box<dyn Error>>{
@@ -291,6 +334,25 @@ fn recursive_read_properties(properties: &mut HashMap<String, Property>, schema:
 
 }
 
+fn generate_default_value_token(ty: &Type, default: &Value, field_name: &String) -> TokenStream{
+    match ty{
+        Type::Any => unimplemented!(),
+        Type::Array(array) => quote!{{ Vec::default(); }},
+        Type::FixedArray(array) => {
+            let array_items = default.as_array().unwrap().iter().map(|item| generate_default_value_token(&array.item, item, field_name));
+            quote!{ [ #(#array_items),* ]}
+        }
+        Type::Boolean => { let value = default.as_bool().unwrap(); quote!{ #value } },
+        Type::Enum(enumeration) => { let ident = Ident::new(&field_name.to_case(Case::UpperCamel), Span::call_site()); quote!{ #ident::default() } },
+        Type::Integer => { let integer : i64 = default.as_i64().unwrap(); quote!{ #integer }},
+        Type::MapOfObjects => quote!{ Map<String, Value>::default() },
+        Type::Number => { let number : f64 = default.as_f64().unwrap(); quote!{ #number }},
+        Type::String => unimplemented!(),
+        Type::TypedObject(_) => unimplemented!(),
+        Type::UntypedObject => unimplemented!(),
+    }
+}
+
 fn write_rust(schema_lookup: &HashMap<String, SchemaContext>, schema: &SchemaContext, writer: &mut dyn std::io::Write, open_types: &mut Vec<String>, closed_types: &HashSet<String>){
     let metadata = schema.schema.metadata.as_ref().unwrap();
     let comment = metadata.description.as_ref();
@@ -301,15 +363,13 @@ fn write_rust(schema_lookup: &HashMap<String, SchemaContext>, schema: &SchemaCon
 
     let mut embedded_enums = Vec::new();
 
+    let mut default_declarations = Vec::new();
+
 
     let mut property_tokens = Vec::new();
     for (name, property) in properties.iter(){
         let rusty_name = name.to_case(Case::Snake).replace("type", "ty");
         schedule_types(open_types, closed_types, &property.ty);
-
-        
-
-        
 
         let rust_type = match (&property.ty , property.optional){
             // Remove the Option for optional Vec's with a minimum length of 1
@@ -356,13 +416,40 @@ fn write_rust(schema_lookup: &HashMap<String, SchemaContext>, schema: &SchemaCon
                 Type::Boolean => !default.as_bool().unwrap(),
                 Type::Integer => default.as_i64().unwrap() == 0,
                 Type::Number => default.as_f64().unwrap() == 0.0,
+                Type::Array(_) => default.as_array().unwrap().is_empty(),
                 _ => false,
             },
-            _ => false
+            _ => match property.ty{
+                Type::Array(_) => property.optional,
+                _ => false,
+            }
         };
 
-        let default_declaration = default_is_type_default.then(|| quote!{ #[serde(default)]} );
+        // For objects with an explicit default, create a default declaration
+        let mut default_value = property.default.as_ref().map(|default| generate_default_value_token(&property.ty, default, name));
 
+        // For optional arrays with a minimum size, we add a default 
+        if default_value.is_none(){
+            default_value = match property.ty{
+                Type::Array(_) if property.optional => Some(quote!{ Vec::default() }),
+                _ => None,
+            };
+        }
+
+
+        let default_declaration = default_value.as_ref().map(|_| Ident::new(&format!("get_default_{}", name.to_case(Case::Snake)), Span::call_site()));
+
+
+        if let Some(default_declaration) = &default_declaration{
+            default_declarations.push(quote!{
+                fn #default_declaration() -> #rust_type{
+                    #default_value
+                }
+            });
+        }
+
+
+        let default_declaration = default_declaration.as_ref().map(|declaration| { let string = declaration.to_string(); quote!{ #[serde(default=#string)]}});
 
         let ident = Ident::new(&rusty_name, Span::call_site());
         let docstring = property.comment.as_ref().map(|x| quote!{ #[doc=#x] });
@@ -393,6 +480,8 @@ fn write_rust(schema_lookup: &HashMap<String, SchemaContext>, schema: &SchemaCon
             pub struct #name{
                 #(#property_tokens),*
             }
+
+            #(#default_declarations)*
 
         }
     });
