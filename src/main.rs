@@ -1,5 +1,5 @@
-use schemars::{schema::{SchemaObject, RootSchema}, visit::{Visitor, visit_schema_object}};
-use std::{fs::File, io::BufWriter};
+use schemars::{schema::{SchemaObject, RootSchema, self}, visit::{Visitor, visit_schema_object}};
+use std::{fs::File, io::BufWriter, array};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use schemars::visit::visit_root_schema;
@@ -32,9 +32,15 @@ struct ArrayType{
     item: Box<Type>
 }
 
+struct FixedArrayType{
+    item: Box<Type>,
+    length: u32,
+}
+
 enum Type{
     Any,
     Array(ArrayType),
+    FixedArray(FixedArrayType),
     TypedObject(String),
     UntypedObject,
     String,
@@ -146,14 +152,17 @@ fn handle_type(schema: &SchemaContext) -> Result<Type, Box<dyn Error>>{
                         Ok(Some(Type::MapOfObjects))
                     }
                     else{
-                        Ok(Some(Type::UntypedObject))
+                        unreachable!();
                     }
-                }
-                else{
+
+                // If the object has a title, it's a typed object
+                } else if let Some(id) = schema.schema.metadata.as_ref().and_then(|metadata| metadata.id.as_ref()){
+                    Ok(Some(Type::TypedObject(id.clone())))
+                } else{
                     Ok(Some(Type::UntypedObject))
                 }
             }
-            InstanceType::Array => Ok(Some(Type::Array(handle_array(schema)?))),
+            InstanceType::Array => Ok(Some(handle_array(schema)?)),
             InstanceType::Number => Ok(Some(Type::Number)),
             InstanceType::String => Ok(Some(Type::String)),
             InstanceType::Integer => Ok(Some(Type::Integer)),
@@ -175,39 +184,38 @@ fn handle_type(schema: &SchemaContext) -> Result<Type, Box<dyn Error>>{
     Ok(Type::Any)
 }
 
-fn handle_array(schema: &SchemaContext) -> Result<ArrayType, Box<dyn Error>>{
+fn handle_array(schema: &SchemaContext) -> Result<Type, Box<dyn Error>>{
     let array = schema.schema.array.as_ref().unwrap();
 
-    match array.items.as_ref(){
-      Some(SingleOrVec::Single(a)) => {
-        match a.as_ref(){
-            Schema::Object(object)=> {
-                let object = schema.resolve(object);
-                if let Some(SingleOrVec::Single(instance_type)) = object.schema.instance_type.as_ref(){
-                    match **instance_type{
-                        InstanceType::Object => { 
-                            return match object.schema.metadata.as_ref().and_then(|metadata| metadata.id.as_ref()){
-                                Some(id) => Ok(ArrayType{ item: Box::new(Type::TypedObject(id.clone())), min_length: array.min_items }),
-                                _ => Ok(ArrayType{ item: Box::new(Type::UntypedObject), min_length: array.min_items}),
-                            }
-                        },
-                        _ => ()
-                    }
-                }
+    let single_item_type = match array.items.as_ref(){
+        Some(SingleOrVec::Single(ty)) => match ty.as_ref(){
+            Schema::Object(object) => object,
+            _ => return Err(Box::new(MyError::UnhandledArrayItemType)),
+        },
+        _ => return Err(Box::new(MyError::UnhandledArrayItemType)),
+    };
 
-                return Ok(ArrayType{ item: Box::new(handle_type(&object)?), min_length: array.min_items });
-            },
-            _ => Err(Box::new(MyError::UnhandledArrayItemType)),
-        }
-      },
-        _ => Err(Box::new(MyError::UnhandledArrayItemType))
+    let single_item_type = schema.resolve(single_item_type);
+
+    let item_type = handle_type(&single_item_type)?;
+
+    if array.min_items.is_some() && array.min_items == array.max_items{
+        let fixed_length = array.min_items.unwrap();
+        return Ok(Type::FixedArray(FixedArrayType { item: Box::new(item_type), length: fixed_length }));
     }
+
+    Ok(Type::Array(ArrayType { min_length: array.min_items, item: Box::new(item_type) }))
 }
 
 fn generate_rust_type(schema_lookup: &HashMap<String, SchemaContext>, ty: &Type, field_name: &String) -> TokenStream{
     match ty{
         Type::Any => quote!{ serde_json::Value },
         Type::Array(array_type) => { let item_rust_type = generate_rust_type(schema_lookup, &array_type.item, field_name); return quote!{ Vec::< #item_rust_type > }; },
+        Type::FixedArray(array_type) => { 
+            let fixed_length = array_type.length as usize;
+            let rust_item_type = generate_rust_type(schema_lookup, &array_type.item,field_name);
+            quote!{ [#rust_item_type; #fixed_length ]}
+        },
         Type::Boolean => quote!{ bool },
         Type::Integer => quote!{ i64 },
         Type::Number => quote!{ f64 },
@@ -305,7 +313,9 @@ fn write_rust(schema_lookup: &HashMap<String, SchemaContext>, schema: &SchemaCon
             // Remove the Option for optional Vec's with a minimum length of 1
             // This way we can guarantee this invariant by telling serde to not serialize zero length vecs.
             (Type::Array(array_type), true) if array_type.min_length.is_some() && array_type.min_length.unwrap() == 1 => generate_rust_type(schema_lookup, &property.ty, name),
-            (_, true) => { let rust_type : TokenStream = generate_rust_type(schema_lookup,&property.ty, name); quote!{ Option::<#rust_type> } },
+
+            // Remove the Option for optional properties which have a default value specified.
+            (_, true) if property.default.is_none() => { let rust_type : TokenStream = generate_rust_type(schema_lookup,&property.ty, name); quote!{ Option::<#rust_type> } },
             _ => generate_rust_type(schema_lookup,&property.ty, name),
         };
 
