@@ -12,6 +12,7 @@ use std::error::Error;
 use thiserror::Error;
 use std::collections::{HashMap, HashSet};
 use serde_json::Value;
+use std::io::Write;
 
 #[derive(Debug, Error)]
 enum MyError {
@@ -223,11 +224,12 @@ fn generate_rust_type(schema_lookup: &HashMap<String, SchemaContext>, ty: &Type,
         Type::Enum(enumeration) => { let ident = Ident::new(&field_name.to_case(Case::UpperCamel), Span::call_site()); quote!{ #ident } },
         Type::TypedObject(id) => { 
             let name = schema_lookup.get(id).unwrap().schema.metadata.as_ref().unwrap().title.as_ref().unwrap().replace(" ", "");
+            let module = Ident::new(&name.to_lowercase(), Span::call_site());
             let ident = Ident::new(&name, Span::call_site());
-             quote!{ #ident } 
+             quote!{ super::#module::#ident } 
         },
-        Type::UntypedObject => quote!{ Map::<String, serde_json::Value> },
-        Type::MapOfObjects => quote!{ Map<String, Map<String, serde_json::Value>> }
+        Type::UntypedObject => quote!{ Map<String, Value> },
+        Type::MapOfObjects => quote!{ Map<String, Value> }
     }
 }
 
@@ -340,6 +342,7 @@ fn write_rust(schema_lookup: &HashMap<String, SchemaContext>, schema: &SchemaCon
 
             let default_declaration = property.default.as_ref().map(|_| quote!{ #[derive(Default)] });
             embedded_enums.push(quote!{
+                #[derive(Serialize, Deserialize)]
                 #[serde(untagged)]
                 #default_declaration
                 enum #rusty_enum_name{
@@ -381,11 +384,14 @@ fn write_rust(schema_lookup: &HashMap<String, SchemaContext>, schema: &SchemaCon
 
     write!(writer, "{}", quote!{
         mod #mod_name{
+            use serde::{Serialize, Deserialize};
+            use serde_json::{Map, Value};
 
             #(#embedded_enums)*
 
+            #[derive(Serialize, Deserialize)]
             #doc
-            struct #name{
+            pub struct #name{
                 #(#property_tokens),*
             }
 
@@ -451,7 +457,7 @@ fn main(){
     // Load the root schema
     schema_store.read_root("vendor\\gltf\\specification\\2.0\\schema\\glTF.schema.json").unwrap();
 
-    let output = File::create("output_bindings.rs").unwrap();
+    let output = File::create("gltf_for_rust\\src\\lib.rs").unwrap();
     let mut writer = BufWriter::new(output);
 
     // Build a map to lookup named types in the schemas
