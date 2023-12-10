@@ -11,6 +11,7 @@ use convert_case::{Case, Casing};
 use std::error::Error;
 use thiserror::Error;
 use std::collections::{HashMap, HashSet};
+use serde_json::Value;
 
 #[derive(Debug, Error)]
 enum MyError {
@@ -22,6 +23,9 @@ enum MyError {
     UnhandledArrayItemType
 }
 
+struct Enum{
+    options: Vec<String>,
+}
 
 enum Type{
     Any,
@@ -32,6 +36,8 @@ enum Type{
     Boolean,
     Number,
     Integer,
+    Enum(Enum),
+    MapOfObjects
 }
 
 
@@ -49,7 +55,50 @@ fn handle_field(schema_store: &SchemaStore, current_path: &PathBuf, schema: &Sch
         }
     }
 
+    if let Some(enumeration) = try_match_enum(schema){
+        return Ok(Type::Enum(enumeration));
+    }
+
     handle_type(schema_store, current_path, schema)
+}
+
+fn try_match_enum(schema: &SchemaObject) -> Option<Enum>{
+    let any_of = match schema.subschemas.as_ref().and_then(|subschema| subschema.any_of.as_ref()){
+        Some(any_of) => any_of,
+        _ => return None,
+    };
+
+    let mut options = Vec::new();
+    for option in any_of{
+        let option = match option{
+            Schema::Object(object) => object,
+            _ => return None,
+        };
+
+        let is_string_constant = match option.const_value.as_ref(){
+            Some(Value::String(option)) => {
+                options.push(option.clone());
+                true
+            }
+            _ => false,
+        };
+
+        let is_string = match option.instance_type.as_ref(){
+            Some(SingleOrVec::Single(single)) => {
+                match single.as_ref(){
+                    InstanceType::String => true,
+                    _ => false
+                }
+            },
+            _ => false
+        };
+
+        if !is_string && !is_string_constant{
+            return None;
+        }
+    }
+
+    Some(Enum { options })
 }
 
 fn handle_type(schema_store: &SchemaStore, current_path: &PathBuf, schema: &SchemaObject) -> Result<Type, Box<dyn Error>>{
@@ -61,7 +110,18 @@ fn handle_type(schema_store: &SchemaStore, current_path: &PathBuf, schema: &Sche
             InstanceType::Null => Err(Box::new(MyError::UnhandledInstanceType(schema.instance_type.clone())) as Box<dyn Error>),
             InstanceType::Boolean => Ok(Some(Type::Boolean)),
             InstanceType::Object => {
-                Ok(Some(Type::UntypedObject))
+                // An object with no properties, but only additionalProperties, as a typed map
+                if let Some(additional_properties) = schema.object.as_ref().unwrap().additional_properties.as_ref(){
+                    if schema.object.as_ref().unwrap().properties.is_empty(){
+                        Ok(Some(Type::MapOfObjects))
+                    }
+                    else{
+                        Ok(Some(Type::UntypedObject))
+                    }
+                }
+                else{
+                    Ok(Some(Type::UntypedObject))
+                }
             }
             InstanceType::Array => handle_array(schema_store, current_path, schema).map(|ok| Some(ok)),
             InstanceType::Number => Ok(Some(Type::Number)),
@@ -112,20 +172,22 @@ fn handle_array(schema_store: &SchemaStore, current_path: &PathBuf, schema: &Sch
     }
 }
 
-fn generate_rust_type(schema_store : &SchemaStore, schema_lookup: &HashMap<String, &SchemaObject>, ty: &Type) -> TokenStream{
+fn generate_rust_type(schema_store : &SchemaStore, schema_lookup: &HashMap<String, &SchemaObject>, ty: &Type, field_name: &String) -> TokenStream{
     match ty{
         Type::Any => quote!{ serde_json::Value },
-        Type::Array(item_type) => { let item_rust_type = generate_rust_type(schema_store, schema_lookup, item_type); return quote!{ Vec::< #item_rust_type > }; },
+        Type::Array(item_type) => { let item_rust_type = generate_rust_type(schema_store, schema_lookup, item_type, field_name); return quote!{ Vec::< #item_rust_type > }; },
         Type::Boolean => quote!{ bool },
         Type::Integer => quote!{ i64 },
         Type::Number => quote!{ f64 },
         Type::String => quote!{ String },
+        Type::Enum(enumeration) => { let ident = Ident::new(&field_name.to_case(Case::UpperCamel), Span::call_site()); quote!{ #ident } },
         Type::TypedObject(id) => { 
             let name = schema_lookup.get(id).unwrap().metadata.as_ref().unwrap().title.as_ref().unwrap().replace(" ", "");
             let ident = Ident::new(&name, Span::call_site());
              quote!{ #ident } 
         },
-        Type::UntypedObject => quote!{ HashMap::<String, serde_json::Value> }
+        Type::UntypedObject => quote!{ Map::<String, serde_json::Value> },
+        Type::MapOfObjects => quote!{ Map<String, Map<String, serde_json::Value>> }
     }
 }
 
@@ -144,6 +206,7 @@ fn schedule_types(open_types: &mut Vec<String>, closed_types: &HashSet<String>, 
 struct Property{
     ty: Type,
     optional: bool,
+    default: Option<Value>,
     comment: Option<String>,
 }
 
@@ -164,7 +227,7 @@ fn recursive_read_properties(properties: &mut HashMap<String, Property>, schema:
         };
         let field_schema = schema_store.resolve(schema_path, field_schema);
 
-        let property = properties.entry(name.clone()).or_insert(Property{ ty: Type::Any, optional: true, comment: None});
+        let property = properties.entry(name.clone()).or_insert(Property{ ty: Type::Any, optional: true, comment: None, default: None});
 
         match property.ty{
             Type::Any => property.ty = handle_field(schema_store, schema_path, field_schema).unwrap(),
@@ -173,6 +236,10 @@ fn recursive_read_properties(properties: &mut HashMap<String, Property>, schema:
 
         if property.comment.is_none(){
             property.comment = field_schema.metadata.as_ref().and_then(|metadata| metadata.description.clone());
+        }
+
+        if property.default.is_none(){
+            property.default = field_schema.metadata.as_ref().and_then(|metadata| metadata.default.clone());
         }
         
         if object_schema.required.contains(name){
@@ -190,22 +257,68 @@ fn write_rust(schema_store: &SchemaStore, schema_lookup: &HashMap<String, &Schem
     let mut properties = HashMap::new();
     recursive_read_properties(&mut properties, schema, schema_store, schema_path);
 
+    let mut embedded_enums = Vec::new();
+
+
     let mut property_tokens = Vec::new();
     for (name, property) in properties.iter(){
         let rusty_name = name.to_case(Case::Snake).replace("type", "ty");
         schedule_types(open_types, closed_types, &property.ty);
 
         let rust_type = match (&property.ty , property.optional){
-            (Type::Array(_), true) => generate_rust_type(schema_store, schema_lookup, &property.ty),
-            (_, true) => { let rust_type : TokenStream = generate_rust_type(schema_store, schema_lookup,&property.ty); quote!{ Option::<#rust_type> } },
-            _ => generate_rust_type(schema_store, schema_lookup,&property.ty),
+            (Type::Array(_), true) => generate_rust_type(schema_store, schema_lookup, &property.ty, name),
+            (_, true) => { let rust_type : TokenStream = generate_rust_type(schema_store, schema_lookup,&property.ty, name); quote!{ Option::<#rust_type> } },
+            _ => generate_rust_type(schema_store, schema_lookup,&property.ty, name),
         };
+
+        // Embedded enums
+        if let Type::Enum(enumeration) = &property.ty{
+            let rusty_enum_name = Ident::new(&name.to_case(Case::UpperCamel), Span::call_site());
+            let enum_options = enumeration.options.iter().map(|option|{
+                let identifier = Ident::new(&option.to_case(Case::UpperCamel).replace(&['/'], ""), Span::call_site());
+
+                let is_default = match &property.default{
+                    Some(Value::String(string)) => string == option,
+                    _ => false
+                };
+
+                let default_declaration = is_default.then(|| quote!{ #[default] } );
+                quote!{
+                    #[serde(rename=#option)]
+                    #default_declaration
+                    #identifier
+                }
+            });
+
+            let default_declaration = property.default.as_ref().map(|_| quote!{ #[derive(Default)] });
+            embedded_enums.push(quote!{
+                #[serde(untagged)]
+                #default_declaration
+                enum #rusty_enum_name{
+                    #(#enum_options),*
+                }
+            });
+        }
+
+        let default_is_type_default = match property.default.as_ref(){
+            Some(default) => match property.ty{
+                Type::Enum(_) => true,
+                Type::Boolean => !default.as_bool().unwrap(),
+                Type::Integer => default.as_i64().unwrap() == 0,
+                Type::Number => default.as_f64().unwrap() == 0.0,
+                _ => false,
+            },
+            _ => false
+        };
+
+        let default_declaration = default_is_type_default.then(|| quote!{ #[serde(default)]} );
 
 
         let ident = Ident::new(&rusty_name, Span::call_site());
         let docstring = property.comment.as_ref().map(|x| quote!{ #[doc=#x] });
         property_tokens.push(quote!{
             #[serde(rename = #name)]
+            #default_declaration
             #docstring
             #ident: #rust_type
         })
@@ -216,10 +329,18 @@ fn write_rust(schema_store: &SchemaStore, schema_lookup: &HashMap<String, &Schem
         _ => None,
     };
 
+    let mod_name = Ident::new(&metadata.title.as_ref().unwrap().replace(" ", "").to_lowercase(), Span::call_site());
+
     write!(writer, "{}", quote!{
-        #doc
-        struct #name{
-            #(#property_tokens),*
+        mod #mod_name{
+
+            #(#embedded_enums)*
+
+            #doc
+            struct #name{
+                #(#property_tokens),*
+            }
+
         }
     });
 }
