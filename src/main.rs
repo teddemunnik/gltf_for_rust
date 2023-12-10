@@ -41,20 +41,16 @@ enum Type{
 }
 
 
-struct ObjectReference{}
 
 fn handle_field(schema_store: &SchemaStore, current_path: &PathBuf, schema: &SchemaObject) -> Result<Type, Box<dyn Error>>{
     // If we have an allOf with a single entry we can use it as our type
     if let Some(subschema) = &schema.subschemas{
-        let the_schema = subschema.all_of.as_ref().unwrap().first().unwrap();
-        let the_schema = match the_schema{
-            Schema::Object(object) => object,
-            _ => unreachable!(),
-        };
-        let the_schema = schema_store.resolve(current_path, the_schema);
-        if let Some(_) = the_schema.object{
-            if let Some(name) = the_schema.metadata.as_ref().and_then(|md| md.title.as_ref() ){
-                return Ok(Type::TypedObject(name.clone()));
+        if let Some(Schema::Object(single_all_of)) = subschema.all_of.as_ref().and_then(|all_of| all_of.first()){
+            let the_schema = schema_store.resolve(current_path, single_all_of);
+            if let Some(_) = the_schema.object{
+                if let Some(id) = the_schema.metadata.as_ref().and_then(|md| md.id.as_ref() ){
+                    return Ok(Type::TypedObject(id.clone()));
+                }
             }
         }
     }
@@ -70,7 +66,7 @@ fn handle_type(schema_store: &SchemaStore, current_path: &PathBuf, schema: &Sche
         Some(SingleOrVec::Single(a)) => match **a{
             InstanceType::Null => Err(Box::new(MyError::UnhandledInstanceType(schema.instance_type.clone())) as Box<dyn Error>),
             InstanceType::Boolean => Ok(Some(Type::Boolean)),
-            InstanceType::Object => Err(Box::new(MyError::UnhandledInstanceType(schema.instance_type.clone())) as Box<dyn Error>),
+            InstanceType::Object => Ok(Some(Type::UntypedObject)),
             InstanceType::Array => handle_array(schema_store, current_path, schema).map(|ok| Some(ok)),
             InstanceType::Number => Ok(Some(Type::Number)),
             InstanceType::String => Ok(Some(Type::String)),
@@ -97,13 +93,21 @@ fn handle_array(schema_store: &SchemaStore, current_path: &PathBuf, schema: &Sch
     match array.items.as_ref(){
       Some(SingleOrVec::Single(a)) => {
         match a.as_ref(){
-            Schema::Object(object) => {
+            Schema::Object(object)=> {
                 let object = schema_store.resolve(current_path, object);
-                if let Some(name) = object.metadata.as_ref().and_then(|md| md.title.as_ref()){
-                    Ok(Type::Array(Box::new(Type::TypedObject(name.clone().replace(" ", "")))))
-                }else{
-                    Ok(Type::Array(Box::new(handle_type(schema_store, current_path, object)?)))
+                if let Some(SingleOrVec::Single(instance_type)) = object.instance_type.as_ref(){
+                    match **instance_type{
+                        InstanceType::Object => { 
+                            return match object.metadata.as_ref().and_then(|metadata| metadata.id.as_ref()){
+                                Some(id) => Ok(Type::Array(Box::new(Type::TypedObject(id.clone())))),
+                                _ => Ok(Type::Array(Box::new(Type::UntypedObject))),
+                            }
+                        },
+                        _ => ()
+                    }
                 }
+                let object = schema_store.resolve(current_path, object);
+                return Ok(Type::Array(Box::new(handle_type(schema_store, current_path, object)?)));
             },
             _ => Err(Box::new(MyError::UnhandledArrayItemType)),
         }
@@ -112,28 +116,42 @@ fn handle_array(schema_store: &SchemaStore, current_path: &PathBuf, schema: &Sch
     }
 }
 
-fn generate_rust_type(ty: &Type) -> TokenStream{
+fn generate_rust_type(schema_store : &SchemaStore, schema_lookup: &HashMap<String, &SchemaObject>, ty: &Type) -> TokenStream{
     match ty{
         Type::Any => quote!{ serde_json::Value },
-        Type::Array(item_type) => { let item_rust_type = generate_rust_type(item_type); return quote!{ Vec::< #item_rust_type > }; },
+        Type::Array(item_type) => { let item_rust_type = generate_rust_type(schema_store, schema_lookup, item_type); return quote!{ Vec::< #item_rust_type > }; },
         Type::Boolean => quote!{ bool },
         Type::Integer => quote!{ i64 },
         Type::Number => quote!{ f64 },
         Type::String => quote!{ String },
-        Type::TypedObject(name) => { let ident = Ident::new(name, Span::call_site()); quote!{ #ident } },
+        Type::TypedObject(id) => { 
+            let name = schema_lookup.get(id).unwrap().metadata.as_ref().unwrap().title.as_ref().unwrap().replace(" ", "");
+            let ident = Ident::new(&name, Span::call_site());
+             quote!{ #ident } 
+        },
         Type::UntypedObject => quote!{ HashMap::<String, serde_json::Value> }
     }
 }
 
-fn write_rust(schema_store: &SchemaStore, schema_path: &PathBuf, writer: &mut dyn std::io::Write){
-    let schema = schema_store.schemas.get(schema_path).unwrap();
+fn schedule_types(open_types: &mut Vec<String>, closed_types: &HashSet<String>, ty: &Type){
+    match ty{
+        Type::Array(item_ty) => schedule_types(open_types, closed_types, item_ty.as_ref()),
+        Type::TypedObject(id) => {
+            if !closed_types.contains(id) && !open_types.contains(id){
+                open_types.push(id.clone());
+            }
+        },
+        _ => (),
+    }
+}
 
-    let metadata = schema.schema.metadata.as_ref().unwrap();
-    let comment = metadata.description.as_ref().unwrap();
-    let name = Ident::new(metadata.title.as_ref().unwrap(), Span::call_site());
+fn write_rust(schema_store: &SchemaStore, schema_lookup: &HashMap<String, &SchemaObject>, schema_path: &PathBuf, schema: &SchemaObject, writer: &mut dyn std::io::Write, open_types: &mut Vec<String>, closed_types: &HashSet<String>){
+    let metadata = schema.metadata.as_ref().unwrap();
+    let comment = metadata.description.as_ref();
+    let name = Ident::new(&metadata.title.as_ref().unwrap().replace(" ", ""), Span::call_site());
 
     let mut property_tokens = Vec::new();
-    let object_schema = schema.schema.object.as_ref().unwrap();
+    let object_schema = schema.object.as_ref().unwrap();
     for (name, schema) in object_schema.properties.iter(){
         let schema = match schema{
             Schema::Object(object) => object,
@@ -141,17 +159,17 @@ fn write_rust(schema_store: &SchemaStore, schema_path: &PathBuf, writer: &mut dy
         };
         let schema = schema_store.resolve(schema_path, schema);
 
-        let rusty_name = name.to_case(Case::Snake);
-
+        let rusty_name = name.to_case(Case::Snake).replace("type", "ty");
 
         let ty = handle_field(schema_store, schema_path, schema).unwrap();
-    
+        schedule_types(open_types, closed_types, &ty);
+
         let optional = !object_schema.required.contains(name);
 
         let rust_type = match (&ty , optional){
-            (Type::Array(_), true) => generate_rust_type(&ty),
-            (_, true) => { let rust_type : TokenStream = generate_rust_type(&ty); quote!{ Option::<#rust_type> } },
-            _ => generate_rust_type(&ty),
+            (Type::Array(_), true) => generate_rust_type(schema_store, schema_lookup, &ty),
+            (_, true) => { let rust_type : TokenStream = generate_rust_type(schema_store, schema_lookup,&ty); quote!{ Option::<#rust_type> } },
+            _ => generate_rust_type(schema_store, schema_lookup,&ty),
         };
 
         let comment = schema.metadata.as_ref().map(|metadata| metadata.description.clone());
@@ -165,9 +183,13 @@ fn write_rust(schema_store: &SchemaStore, schema_path: &PathBuf, writer: &mut dy
         })
     }
 
+    let doc = match comment{
+        Some(comment) => Some(quote!{ #[doc=#comment]}),
+        _ => None,
+    };
 
     write!(writer, "{}", quote!{
-        #[doc=#comment]
+        #doc
         struct #name{
             #(#property_tokens),*
         }
@@ -245,8 +267,30 @@ fn main(){
     let mut output = File::create("output_bindings.rs").unwrap();
     let mut writer = BufWriter::new(output);
 
-    for root in &schema_store.roots{
-        write_rust(&schema_store, root, &mut writer);
+    // Build a map to lookup named types in the schemas
+    let mut schema_lookup = HashMap::new();
+    for (path, schema) in schema_store.schemas.iter(){
 
+        if let Some(id) = schema.schema.metadata.as_ref().and_then(|metadata| metadata.id.as_ref()){
+            schema_lookup.insert(id.clone(), &schema.schema);
+        }
+    }
+
+    // Collect root types:
+    let mut closed_types = HashSet::new();
+    let mut open_types = Vec::new();
+    for path in schema_store.roots.iter(){
+        let schema = schema_store.schemas.get(path).unwrap();
+        if let Some(id) = schema.schema.metadata.as_ref().and_then(|metadata| metadata.id.as_ref()){
+            open_types.push(id.clone());
+        }
+    }
+
+    while !open_types.is_empty(){
+        let id = open_types.pop().unwrap();
+        closed_types.insert(id.clone());
+        let schema = *schema_lookup.get(&id).unwrap();
+
+        write_rust(&schema_store, &schema_lookup, schema_store.roots.first().unwrap(), schema, &mut writer, &mut open_types, &closed_types);
     }
 }
