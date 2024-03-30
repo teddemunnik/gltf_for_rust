@@ -13,9 +13,11 @@ use std::error::Error;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
-use std::{fs::File, io::BufWriter};
+use std::{fs, fs::File, io::BufWriter};
 use std::cmp::Ordering;
+use std::fs::{FileType, read_dir};
 use thiserror::Error;
+use walkdir::WalkDir;
 
 #[derive(Debug, Error)]
 enum MyError {
@@ -678,15 +680,59 @@ impl SchemaStore {
     }
 }
 
+fn load_extensions(path: &str) -> Result<(), String>{
+    for entry in read_dir(path).expect("Failed to open extensions directory").filter_map(Result::ok).filter(|entry| entry.file_type().map_or(false, |file_type| file_type.is_dir())){
+        // Figure out the extension name and vendor prefix
+        let extension_name = entry.file_name().to_string_lossy().to_string();
+        let vendor_prefix = extension_name.split('_').next().expect("Extension does not start with vendor prefix followed by an underscore");
+
+        // Now we find extension schemas in the schema subfolder
+        // Note not all extensions actually provide a schema if they don't add an extension object
+        let mut schemas_path = entry.path();
+        schemas_path.push("schema");
+        let extension_schema_suffix = format!("{}.schema.json", &extension_name);
+
+        let schemas_dir = match read_dir(schemas_path){
+            Ok(schemas) => schemas,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                println!("Extension {} does not provide any schemas", extension_name);
+                continue;
+            },
+            Err(e) => return Err(String::from("Failed to open schemas directory")),
+        };
+
+        for schema_entry in schemas_dir.filter_map(Result::ok).filter(|entry| entry.file_type().map_or(false, |file_type| file_type.is_file())){
+
+            // If a schema ends with {Prefix}.ExtensionName.schema.json it represents the extension object with the extension name on that object
+            let file_name = schema_entry.file_name().to_string_lossy().to_string();
+            let suffix_start = match file_name.find(&extension_schema_suffix) {
+                Some(index) if index == file_name.len() - extension_schema_suffix.len() => index,
+                _ => continue,
+            };
+
+            let base_object_name = &file_name[0..suffix_start];
+            // TODO: Empty base object name seems to mean it applies to all
+            println!("Extension {} has an extension on {}", &extension_name, &base_object_name);
+        }
+
+    }
+
+    Ok(())
+}
+
+
 fn main() {
     let mut schema_store = SchemaStore {
         schemas: HashMap::new(),
         roots: Vec::new(),
     };
+
     // Load the root schema
     schema_store
         .read_root("vendor\\gltf\\specification\\2.0\\schema\\glTF.schema.json")
         .unwrap();
+
+    load_extensions("vendor\\gltf\\extensions\\2.0\\Khronos").unwrap();
 
     let output = File::create("gltf_for_rust\\src\\generated.rs").unwrap();
     let mut writer = BufWriter::new(output);
