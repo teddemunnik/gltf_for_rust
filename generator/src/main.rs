@@ -61,7 +61,6 @@ enum Type {
 #[derive(Clone)]
 struct SchemaContext<'a> {
     schema_store: &'a SchemaStore,
-    path: PathBuf,
     schema: &'a SchemaObject,
 }
 
@@ -71,20 +70,14 @@ impl<'a> SchemaContext<'a> {
         'b: 'c,
     {
         if schema.is_ref() {
-            let mut path = self.path.clone();
-            path.pop();
-            let path = path.join(schema.reference.as_ref().unwrap());
-
             return SchemaContext {
                 schema_store: self.schema_store,
-                schema: &self.schema_store.schemas.get(&path).unwrap().schema,
-                path,
+                schema: &self.schema_store.schemas.get(schema.reference.as_ref().unwrap()).unwrap().schema,
             };
         }
 
         SchemaContext {
             schema_store: self.schema_store,
-            path: self.path.clone(),
             schema,
         }
     }
@@ -617,7 +610,6 @@ fn write_rust(
 
 struct ReferencedSchemaVisitor<'a> {
     store: &'a mut SchemaStore,
-    current_directory: PathBuf,
     result: Result<(), Box<dyn Error>>,
 }
 
@@ -630,10 +622,7 @@ impl<'a> Visitor for ReferencedSchemaVisitor<'a> {
 
         // Resolve the schema by path
         if schema.is_ref() {
-            let schema_path = self
-                .current_directory
-                .join(schema.reference.as_ref().unwrap());
-            self.result = self.store.read(schema_path);
+            self.result = self.store.read(schema.reference.as_ref().unwrap());
             return;
         }
 
@@ -642,41 +631,38 @@ impl<'a> Visitor for ReferencedSchemaVisitor<'a> {
 }
 
 struct SchemaStore {
-    schemas: HashMap<PathBuf, RootSchema>,
-    roots: Vec<PathBuf>,
+    folder: PathBuf,
+    schemas: HashMap<String, RootSchema>,
+    roots: Vec<String>,
 }
 
 impl SchemaStore {
-    fn read_root<P: AsRef<Path> + Clone>(&mut self, path: P) -> Result<(), Box<dyn Error>>
-    where
-        PathBuf: From<P>,
+    fn read_root(&mut self, id: &str) -> Result<(), Box<dyn Error>>
     {
-        let result = self.read(path.clone());
-        self.roots.push(path.into());
+        let result = self.read(id);
+        self.roots.push(id.into());
         result
     }
 
-    fn read<P: AsRef<Path> + Clone>(&mut self, path: P) -> Result<(), Box<dyn Error>>
-    where
-        PathBuf: From<P>,
+    fn read(&mut self, id: &str) -> Result<(), Box<dyn Error>>
     {
+        let mut full_path = self.folder.clone();
+        full_path.push(id);
+
         // Read the requested schema
-        let file = File::open(path.clone())
-            .map_err(|_| MyError::FailedToOpenSchema(PathBuf::from(path.clone())))?;
+        let file = File::open(&full_path)
+            .map_err(|_| MyError::FailedToOpenSchema(full_path.clone()))?;
         let reader = BufReader::new(file);
         let mut root_schema = serde_json::from_reader(reader)
-            .map_err(|_| MyError::FailedToOpenSchema(PathBuf::from(path.clone())))?;
+            .map_err(|_| MyError::FailedToOpenSchema(full_path.clone()))?;
 
         // Read any requested subschema
-        let mut current_directory = PathBuf::from(path.clone());
-        current_directory.pop();
         let mut visitor = ReferencedSchemaVisitor {
             store: self,
-            current_directory,
             result: Result::Ok(()),
         };
         visit_root_schema(&mut visitor, &mut root_schema);
-        self.schemas.insert(path.into(), root_schema);
+        self.schemas.insert(id.to_string(), root_schema);
         Ok(())
     }
 }
@@ -812,6 +798,7 @@ fn write_root_module(generated_path: &str, generated_manifest: &GeneratedManifes
 
 fn main() {
     let mut schema_store = SchemaStore {
+        folder: PathBuf::from("vendor\\gltf\\specification\\2.0\\schema"),
         schemas: HashMap::new(),
         roots: Vec::new(),
     };
@@ -822,7 +809,7 @@ fn main() {
 
     // Load the root schema
     schema_store
-        .read_root("vendor\\gltf\\specification\\2.0\\schema\\glTF.schema.json")
+        .read_root("glTF.schema.json")
         .unwrap();
 
     let mut generated_manifest = GeneratedManifest::new();
@@ -844,7 +831,6 @@ fn main() {
                 id.clone(),
                 SchemaContext {
                     schema_store: &schema_store,
-                    path: path.clone(),
                     schema: &schema.schema,
                 },
             );
