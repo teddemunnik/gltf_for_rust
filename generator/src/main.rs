@@ -17,6 +17,7 @@ use std::{fs, fs::File, io::BufWriter};
 use std::cmp::Ordering;
 use std::fs::{FileType, read_dir};
 use thiserror::Error;
+use std::io::Write;
 use walkdir::WalkDir;
 
 #[derive(Debug, Error)]
@@ -680,11 +681,13 @@ impl SchemaStore {
     }
 }
 
-fn load_extensions(extensions_path: &str, generated_path: &str) -> Result<(), String>{
+fn load_extensions(generated_manifest: &mut GeneratedManifest, extensions_path: &str, generated_path: &str) -> Result<(), String>{
     for entry in read_dir(extensions_path).expect("Failed to open extensions directory").filter_map(Result::ok).filter(|entry| entry.file_type().map_or(false, |file_type| file_type.is_dir())){
         // Figure out the extension name and vendor prefix
         let extension_name = entry.file_name().to_string_lossy().to_string();
         let vendor_prefix = extension_name.split('_').next().expect("Extension does not start with vendor prefix followed by an underscore");
+
+        let extension_module_name = extension_name.to_case(Case::Snake);
 
         // Now we find extension schemas in the schema subfolder
         // Note not all extensions actually provide a schema if they don't add an extension object
@@ -716,8 +719,10 @@ fn load_extensions(extensions_path: &str, generated_path: &str) -> Result<(), St
         }
 
 
-        let output = File::create(format!("{generated_path}\\{extension_name}.rs")).unwrap();
+        let output = File::create(format!("{generated_path}\\{extension_module_name}.rs")).unwrap();
         let mut writer = BufWriter::new(output);
+
+        generated_manifest.extension_modules.push(extension_module_name);
     }
 
     Ok(())
@@ -749,6 +754,34 @@ fn ensure_empty_dir(path: &str){
     }
 }
 
+struct GeneratedManifest{
+    extension_modules: Vec<String>,
+}
+
+impl GeneratedManifest{
+    fn new() -> Self{
+        Self{
+            extension_modules: Vec::new()
+        }
+    }
+}
+
+fn write_root_module(generated_path: &str, generated_manifest: &GeneratedManifest) {
+    let output = File::create(format!("{generated_path}\\mod.rs")).unwrap();
+    let mut writer = BufWriter::new(output);
+
+    let extension_modules: Vec<TokenStream> = generated_manifest.extension_modules.iter().map(|module_name| {
+        let ident = Ident::new(module_name, Span::call_site());
+        quote! { mod #ident; }
+    }).collect();
+
+    let rust_file: syn::File = syn::parse2(quote! {
+        mod gltf;
+        #(#extension_modules)*
+    }).unwrap();
+
+    write!(writer, "{}", prettyplease::unparse(&rust_file)).unwrap();
+}
 
 fn main() {
     let mut schema_store = SchemaStore {
@@ -765,7 +798,8 @@ fn main() {
         .read_root("vendor\\gltf\\specification\\2.0\\schema\\glTF.schema.json")
         .unwrap();
 
-    load_extensions("vendor\\gltf\\extensions\\2.0\\Khronos", generated_path).unwrap();
+    let mut generated_manifest = GeneratedManifest::new();
+    load_extensions(&mut generated_manifest, "vendor\\gltf\\extensions\\2.0\\Khronos", generated_path).unwrap();
 
     let output = File::create(format!("{generated_path}\\gltf.rs")).unwrap();
     let mut writer = BufWriter::new(output);
@@ -818,4 +852,6 @@ fn main() {
             &closed_types,
         );
     }
+
+    write_root_module(generated_path, &generated_manifest);
 }
