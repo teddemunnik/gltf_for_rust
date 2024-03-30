@@ -680,8 +680,8 @@ impl SchemaStore {
     }
 }
 
-fn load_extensions(path: &str) -> Result<(), String>{
-    for entry in read_dir(path).expect("Failed to open extensions directory").filter_map(Result::ok).filter(|entry| entry.file_type().map_or(false, |file_type| file_type.is_dir())){
+fn load_extensions(extensions_path: &str, generated_path: &str) -> Result<(), String>{
+    for entry in read_dir(extensions_path).expect("Failed to open extensions directory").filter_map(Result::ok).filter(|entry| entry.file_type().map_or(false, |file_type| file_type.is_dir())){
         // Figure out the extension name and vendor prefix
         let extension_name = entry.file_name().to_string_lossy().to_string();
         let vendor_prefix = extension_name.split('_').next().expect("Extension does not start with vendor prefix followed by an underscore");
@@ -715,9 +715,38 @@ fn load_extensions(path: &str) -> Result<(), String>{
             println!("Extension {} has an extension on {}", &extension_name, &base_object_name);
         }
 
+
+        let output = File::create(format!("{generated_path}\\{extension_name}.rs")).unwrap();
+        let mut writer = BufWriter::new(output);
     }
 
     Ok(())
+}
+
+fn ensure_empty_dir(path: &str){
+    match read_dir(path){
+        Ok(dir) => {
+            // Directory was found, remove any entries if they exist
+            for entry in dir {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+
+                    if path.is_dir() {
+                        fs::remove_dir_all(path).expect("Failed to remove a dir");
+                    } else {
+                        fs::remove_file(path).expect("Failed to remove a file");
+                    }
+                };
+            }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            // Directory was not found, create it
+            fs::create_dir(path).unwrap();
+        }
+        Err(e) => panic!("Unhandled error {e}"),
+
+
+    }
 }
 
 
@@ -727,14 +756,18 @@ fn main() {
         roots: Vec::new(),
     };
 
+    // Recreate the generated directory
+    let generated_path = "gltf_for_rust\\src\\generated";
+    ensure_empty_dir(generated_path);
+
     // Load the root schema
     schema_store
         .read_root("vendor\\gltf\\specification\\2.0\\schema\\glTF.schema.json")
         .unwrap();
 
-    load_extensions("vendor\\gltf\\extensions\\2.0\\Khronos").unwrap();
+    load_extensions("vendor\\gltf\\extensions\\2.0\\Khronos", generated_path).unwrap();
 
-    let output = File::create("gltf_for_rust\\src\\generated.rs").unwrap();
+    let output = File::create(format!("{generated_path}\\gltf.rs")).unwrap();
     let mut writer = BufWriter::new(output);
 
     // Build a map to lookup named types in the schemas
