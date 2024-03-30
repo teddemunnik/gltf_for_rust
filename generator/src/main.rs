@@ -14,6 +14,7 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
 use std::{fs::File, io::BufWriter};
+use std::cmp::Ordering;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -456,6 +457,10 @@ fn generate_struct_identifier(metadata: &Box<Metadata>) -> Ident{
     Ident::new(&title.to_case(Case::UpperCamel), Span::call_site())
 }
 
+fn generate_property_identifier(name: &str) -> Ident{
+    Ident::new(&name.to_case(Case::Snake).replace("type", "ty"), Span::call_site())
+}
+
 fn write_rust(
     schema_lookup: &HashMap<String, SchemaContext>,
     schema: &SchemaContext,
@@ -475,7 +480,6 @@ fn write_rust(
 
     let mut property_tokens = Vec::new();
     for (name, property) in properties.iter() {
-        let rusty_name = name.to_case(Case::Snake).replace("type", "ty");
         schedule_types(open_types, closed_types, &property.ty);
 
         let rust_type = match (&property.ty, property.optional) {
@@ -561,13 +565,21 @@ fn write_rust(
                 false => None,
             });
 
-        let ident = Ident::new(&rusty_name, Span::call_site());
+        // If the property identifier is different from the one in the spec we need to add a serde
+        // rename to make it match the spec.
+        let property_ident = generate_property_identifier(name);
+        let rename_declaration = if property_ident.to_string().partial_cmp(&name) != Some(Ordering::Equal){
+            Some(quote![#[serde(rename = #name)]])
+        }else{
+            None
+        };
+
         let docstring = property.comment.as_ref().map(|x| quote! { #[doc=#x] });
         property_tokens.push(quote! {
-            #[serde(rename = #name)]
+            #rename_declaration
             #default_declaration
             #docstring
-            #ident: #rust_type
+            #property_ident: #rust_type
         })
     }
 
