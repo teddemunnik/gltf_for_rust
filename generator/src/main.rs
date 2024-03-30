@@ -410,46 +410,25 @@ fn write_rust(schema_lookup: &HashMap<String, SchemaContext>, schema: &SchemaCon
             });
         }
 
-        let default_is_type_default = match property.default.as_ref(){
-            Some(default) => match property.ty{
-                Type::Enum(_) => true,
-                Type::Boolean => !default.as_bool().unwrap(),
-                Type::Integer => default.as_i64().unwrap() == 0,
-                Type::Number => default.as_f64().unwrap() == 0.0,
-                Type::Array(_) => default.as_array().unwrap().is_empty(),
-                _ => false,
-            },
-            _ => match property.ty{
-                Type::Array(_) => property.optional,
-                _ => false,
-            }
-        };
-
         // For objects with an explicit default, create a default declaration
-        let mut default_value = property.default.as_ref().map(|default| generate_default_value_token(&property.ty, default, name));
-
-        // For optional arrays with a minimum size, we add a default 
-        if default_value.is_none(){
-            default_value = match property.ty{
-                Type::Array(_) if property.optional => Some(quote!{ Vec::default() }),
-                _ => None,
-            };
-        }
-
-
-        let default_declaration = default_value.as_ref().map(|_| Ident::new(&format!("get_default_{}", name.to_case(Case::Snake)), Span::call_site()));
+        let explicit_default_value = property.default.as_ref().map(|default| generate_default_value_token(&property.ty, default, name));
+        let default_declaration = explicit_default_value.as_ref().map(|_| Ident::new(&format!("get_default_{}", name.to_case(Case::Snake)), Span::call_site()));
 
 
         if let Some(default_declaration) = &default_declaration{
             default_declarations.push(quote!{
                 fn #default_declaration() -> #rust_type{
-                    #default_value
+                    #explicit_default_value
                 }
             });
         }
 
 
-        let default_declaration = default_declaration.as_ref().map(|declaration| { let string = declaration.to_string(); quote!{ #[serde(default=#string)]}});
+        let default_declaration =
+            default_declaration.as_ref().map(|declaration| { let string = declaration.to_string(); quote!{ #[serde(default=#string)]}}).or_else(|| match property.optional{
+                true => Some(quote!{ #[serde(default)] }),
+                false => None
+            });
 
         let ident = Ident::new(&rusty_name, Span::call_site());
         let docstring = property.comment.as_ref().map(|x| quote!{ #[doc=#x] });
@@ -468,7 +447,7 @@ fn write_rust(schema_lookup: &HashMap<String, SchemaContext>, schema: &SchemaCon
 
     let mod_name = Ident::new(&metadata.title.as_ref().unwrap().replace(" ", "").to_lowercase(), Span::call_site());
 
-    write!(writer, "{}", quote!{
+    let file: syn::File = syn::parse2(quote!{
         pub mod #mod_name{
             use serde::{Serialize, Deserialize};
             use serde_json::{Map, Value};
@@ -484,7 +463,10 @@ fn write_rust(schema_lookup: &HashMap<String, SchemaContext>, schema: &SchemaCon
             #(#default_declarations)*
 
         }
-    });
+    }).unwrap();
+
+
+    write!(writer, "{}", prettyplease::unparse(&file));
 }
 
 struct ReferencedSchemaVisitor<'a>{
