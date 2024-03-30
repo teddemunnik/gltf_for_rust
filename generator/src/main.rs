@@ -1,20 +1,19 @@
 use convert_case::{Case, Casing};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
-use schemars::schema::{InstanceType, Schema, SingleOrVec};
+use schemars::schema::{InstanceType, Metadata, Schema, SingleOrVec};
 use schemars::visit::visit_root_schema;
 use schemars::{
-    schema::{self, RootSchema, SchemaObject},
+    schema::{RootSchema, SchemaObject},
     visit::{visit_schema_object, Visitor},
 };
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::io::BufReader;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
-use std::{array, fs::File, io::BufWriter};
+use std::{fs::File, io::BufWriter};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -212,7 +211,7 @@ fn handle_type(schema: &SchemaContext) -> Result<Type, Box<dyn Error>> {
             InstanceType::Boolean => Ok(Some(Type::Boolean)),
             InstanceType::Object => {
                 // An object with no properties, but only additionalProperties, as a typed map
-                if let Some(additional_properties) = schema
+                if let Some(_) = schema
                     .schema
                     .object
                     .as_ref()
@@ -320,19 +319,15 @@ fn generate_rust_type(
             quote! { #ident }
         }
         Type::TypedObject(id) => {
-            let name = schema_lookup
+            let metadata= schema_lookup
                 .get(id)
                 .unwrap()
                 .schema
                 .metadata
-                .as_ref()
-                .unwrap()
-                .title
-                .as_ref()
-                .unwrap()
-                .replace(" ", "");
-            let module = Ident::new(&name.to_lowercase(), Span::call_site());
-            let ident = Ident::new(&name, Span::call_site());
+                .as_ref().unwrap();
+
+            let module = generate_module_identifier(metadata);
+            let ident = generate_struct_identifier(metadata);
             quote! { super::#module::#ident }
         }
         Type::UntypedObject => quote! { Map<String, Value> },
@@ -452,6 +447,15 @@ fn generate_default_value_token(ty: &Type, default: &Value, field_name: &String)
     }
 }
 
+fn generate_module_identifier(metadata: &Box<Metadata>) -> Ident{
+    let title = metadata.as_ref().title.as_ref().unwrap().to_lowercase();
+    Ident::new(&title.to_case(Case::Snake), Span::call_site())
+}
+fn generate_struct_identifier(metadata: &Box<Metadata>) -> Ident{
+    let title = metadata.as_ref().title.as_ref().unwrap().to_lowercase();
+    Ident::new(&title.to_case(Case::UpperCamel), Span::call_site())
+}
+
 fn write_rust(
     schema_lookup: &HashMap<String, SchemaContext>,
     schema: &SchemaContext,
@@ -461,11 +465,7 @@ fn write_rust(
 ) {
     let metadata = schema.schema.metadata.as_ref().unwrap();
     let comment = metadata.description.as_ref();
-    let name = Ident::new(
-        &metadata.title.as_ref().unwrap().replace(" ", ""),
-        Span::call_site(),
-    );
-
+    let name = generate_struct_identifier(metadata);
     let mut properties = HashMap::new();
     recursive_read_properties(&mut properties, &schema);
 
@@ -576,15 +576,7 @@ fn write_rust(
         _ => None,
     };
 
-    let mod_name = Ident::new(
-        &metadata
-            .title
-            .as_ref()
-            .unwrap()
-            .replace(" ", "")
-            .to_lowercase(),
-        Span::call_site(),
-    );
+    let mod_name = generate_module_identifier(metadata);
 
     let file: syn::File = syn::parse2(quote! {
         pub mod #mod_name{

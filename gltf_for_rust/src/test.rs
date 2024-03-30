@@ -1,8 +1,8 @@
-use crate::gltf::glTF;
 use serde_json;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
+use crate::gltf::Gltf;
 
 #[test]
 fn test() {
@@ -16,7 +16,7 @@ fn test() {
     let reader = BufReader::new(file);
 
     // Read the JSON contents of the file as an instance of `User`.
-    let u: glTF = serde_json::from_reader(reader).unwrap();
+    let u: Gltf = serde_json::from_reader(reader).unwrap();
 
     println!("{:#?}", u);
 }
