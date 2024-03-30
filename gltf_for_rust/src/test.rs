@@ -2,7 +2,7 @@ use serde_json;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
-use crate::gltf::Gltf;
+use crate::generated::gltf::gltf::Gltf;
 
 #[test]
 fn test() {

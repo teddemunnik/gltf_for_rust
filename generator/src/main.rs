@@ -772,11 +772,11 @@ fn write_root_module(generated_path: &str, generated_manifest: &GeneratedManifes
 
     let extension_modules: Vec<TokenStream> = generated_manifest.extension_modules.iter().map(|module_name| {
         let ident = Ident::new(module_name, Span::call_site());
-        quote! { mod #ident; }
+        quote! { pub mod #ident; }
     }).collect();
 
     let rust_file: syn::File = syn::parse2(quote! {
-        mod gltf;
+        pub mod gltf;
         #(#extension_modules)*
     }).unwrap();
 
