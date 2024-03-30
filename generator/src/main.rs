@@ -704,6 +704,8 @@ fn load_extensions(generated_manifest: &mut GeneratedManifest, extensions_path: 
             Err(e) => return Err(String::from("Failed to open schemas directory")),
         };
 
+        let mut extension_module = Vec::new();
+
         for schema_entry in schemas_dir.filter_map(Result::ok).filter(|entry| entry.file_type().map_or(false, |file_type| file_type.is_file())){
 
             // If a schema ends with {Prefix}.ExtensionName.schema.json it represents the extension object with the extension name on that object
@@ -715,12 +717,37 @@ fn load_extensions(generated_manifest: &mut GeneratedManifest, extensions_path: 
 
             let base_object_name = &file_name[0..suffix_start];
             // TODO: Empty base object name seems to mean it applies to all
+            if base_object_name.is_empty(){
+                continue;
+            }
+
             println!("Extension {} has an extension on {}", &extension_name, &base_object_name);
+
+            let base_object_module_ident = Ident::new(&base_object_name.replace(".", " ").to_case(Case::Snake), Span::call_site());
+            let extension_doc = format!("The {extension_name} extension for {base_object_name}");
+
+            extension_module.push(quote!{
+               mod #base_object_module_ident{
+
+                    #[doc(#extension_doc)]
+                    struct Extension{
+
+
+                    }
+                }
+            });
         }
 
 
         let output = File::create(format!("{generated_path}\\{extension_module_name}.rs")).unwrap();
         let mut writer = BufWriter::new(output);
+
+        let rust_file:syn::File = syn::parse2(quote!{
+            #(#extension_module)*
+        }).unwrap();
+
+        write!(writer, "{}", prettyplease::unparse(&rust_file)).unwrap();
+
 
         generated_manifest.extension_modules.push(extension_module_name);
     }
