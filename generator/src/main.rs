@@ -727,10 +727,10 @@ fn load_extensions(generated_manifest: &mut GeneratedManifest, extensions_path: 
             let extension_doc = format!("The {extension_name} extension for {base_object_name}");
 
             extension_module.push(quote!{
-               mod #base_object_module_ident{
+               pub mod #base_object_module_ident{
 
-                    #[doc(#extension_doc)]
-                    struct Extension{
+                    #[doc=#extension_doc]
+                    pub struct Extension{
 
 
                     }
