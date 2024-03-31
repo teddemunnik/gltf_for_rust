@@ -15,7 +15,7 @@ use std::vec::Vec;
 use std::{fs, fs::File, io::BufWriter};
 use thiserror::Error;
 use schema::{SchemaContext, SchemaStore};
-use crate::schema::SchemaUri;
+use crate::schema::{SchemaType, SchemaUri};
 
 #[derive(Debug, Error)]
 enum MyError {
@@ -243,6 +243,22 @@ fn handle_array(schema: &SchemaContext) -> Result<Type, Box<dyn Error>> {
     }))
 }
 
+fn generate_named_type_path(store: &SchemaStore, uri: &SchemaUri) -> TokenStream{
+    let ty = &store.lookup(uri).unwrap().0.ty;
+    let name = get_raw_name(store, uri);
+
+    let namespace_name = Ident::new(&name.to_case(Case::Snake), Span::call_site());
+    let type_name = Ident::new(&name.to_case(Case::UpperCamel), Span::call_site());
+
+    match ty{
+        SchemaType::Specification => quote!{ crate::gltf::#namespace_name::#type_name},
+        SchemaType::Extension(name) => {
+            let extension_module = Ident::new(name, Span::call_site());
+            quote! { crate::#extension_module::#namespace_name::#type_name }
+        }
+    }
+}
+
 fn generate_rust_type(
     schema_store: &SchemaStore,
     ty: &Type,
@@ -268,9 +284,7 @@ fn generate_rust_type(
             quote! { #ident }
         }
         Type::TypedObject(uri) => {
-            let module = generate_module_identifier(schema_store, uri);
-            let ident = generate_struct_identifier(schema_store, uri);
-            quote! { super::#module::#ident }
+            generate_named_type_path(schema_store, uri)
         }
         Type::MapOfObjects => quote! { Map<String, Value> },
     }
@@ -392,7 +406,7 @@ fn get_raw_name(store: &SchemaStore, uri: &SchemaUri) -> String{
         return definition_name.to_string()
     }
 
-    let title = store.lookup(uri).unwrap().metadata.as_ref().unwrap().title.as_ref().unwrap().to_lowercase();
+    let title = store.lookup(uri).unwrap().1.metadata.as_ref().unwrap().title.as_ref().unwrap().to_lowercase();
 
     // Remove module prefix from title
     let prefix_end= title.find(' ');

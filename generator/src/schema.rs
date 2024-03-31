@@ -63,7 +63,7 @@ impl<'a> SchemaContext<'a> {
                 schema: self
                     .schema_store
                     .lookup(&reference.as_str().into())
-                    .unwrap(),
+                    .unwrap().1
             };
         }
 
@@ -75,7 +75,13 @@ impl<'a> SchemaContext<'a> {
     }
 }
 
+pub enum SchemaType{
+    Specification,
+    Extension(String)
+}
+
 pub struct SchemaStore<'a> {
+    pub ty: SchemaType,
     folder: PathBuf,
     pub schemas: HashMap<String, RootSchema>,
     base: Option<&'a SchemaStore<'a>>,
@@ -96,6 +102,7 @@ fn lookup_fragment<'a>(schema: &'a RootSchema, uri: &SchemaUri) -> Option<&'a Sc
 impl<'a> SchemaStore<'a> {
     pub fn load(folder: &Path, base: Option<&'a SchemaStore>) -> Result<Self, Box<dyn Error>> {
         let mut store = Self{
+            ty: SchemaType::Specification,
             schemas: HashMap::new(),
             folder: PathBuf::from(folder),
             base
@@ -117,9 +124,9 @@ impl<'a> SchemaStore<'a> {
         Ok(store)
     }
 
-    #[allow(unused)]
-    pub fn new_extension(base: &'a SchemaStore<'a>, folder: &Path) -> Self {
+    pub fn new_extension(base: &'a SchemaStore<'a>, folder: &Path, extension_name: String) -> Self {
         Self {
+            ty: SchemaType::Extension(extension_name),
             folder: PathBuf::from(folder),
             base: Some(base),
             schemas: HashMap::new(),
@@ -159,7 +166,7 @@ impl<'a> SchemaStore<'a> {
         }
     }
 
-    pub fn lookup(&self, uri: &SchemaUri) -> Option<&SchemaObject> {
+    pub fn lookup(&self, uri: &SchemaUri) -> Option<(&SchemaStore, &SchemaObject)> {
         // Try in base first
         if let Some(base) = self.base {
             match base.lookup(uri) {
@@ -170,9 +177,9 @@ impl<'a> SchemaStore<'a> {
 
         if let Some(root) = self.schemas.get(uri.path.as_ref().unwrap()){
             if let Some(fragment) = uri.fragment.as_ref(){
-                lookup_fragment(root, uri)
+                lookup_fragment(root, uri).map(|fragment| (self, fragment))
             }else{
-                Some(&root.schema)
+                Some((self, &root.schema))
             }
         }else{
             None
