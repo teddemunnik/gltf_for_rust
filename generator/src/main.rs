@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::vec::Vec;
 use std::{fs, fs::File, io::BufWriter};
 use thiserror::Error;
-use crate::naming::{generate_enum_type_identifier, generate_option_identifier, generate_property_name};
+use crate::naming::{generate_enum_type_identifier, generate_option_identifier, generate_property_identifier};
 
 fn plural_to_singular(maybe_plural: &str) -> String {
     if let Some(singular) = maybe_plural.strip_suffix("ies"){
@@ -575,7 +575,8 @@ fn write_property(
         _ => generate_rust_type(schema_store, &property.ty, &property.name),
     };
 
-    let rust_property_name = generate_property_name(&property.name);
+    let property_identifier = generate_property_identifier(&property.name);
+    let property_identifier_name = property_identifier.to_string();
 
     // For objects with an explicit default, create a default declaration
     let explicit_default_value = property
@@ -584,7 +585,7 @@ fn write_property(
         .map(|default| generate_default_value_token(&property.ty, default, &property.name));
     let default_declaration = explicit_default_value.as_ref().map(|_| {
         Ident::new(
-            &format!("get_default_{}", &rust_property_name),
+            &format!("get_default_{}", &property_identifier_name),
             Span::call_site(),
         )
     });
@@ -617,9 +618,8 @@ fn write_property(
 
     // If the property identifier is different from the one in the spec we need to add a serde
     // rename to make it match the spec.
-    let property_ident = Ident::new(&rust_property_name, Span::call_site());
     let rename_declaration =
-        if rust_property_name.partial_cmp(&property.name) != Some(Ordering::Equal) {
+        if property_identifier_name.partial_cmp(&property.name) != Some(Ordering::Equal) {
             let name = &property.name;
             Some(quote![#[serde(rename = #name)]])
         } else {
@@ -631,7 +631,7 @@ fn write_property(
         #rename_declaration
         #default_declaration
         #docstring
-        pub #property_ident: #rust_type
+        pub #property_identifier: #rust_type
     }
 }
 

@@ -65,10 +65,6 @@ pub fn generate_option_identifier(name: &str) -> Ident{
     )
 }
 
-pub fn generate_property_name(name: &str) -> String{
-    name.to_case(Case::Snake).replace("type", "ty").replace('@', "")
-}
-
 pub fn generate_base_module_identifier(name: &str) -> Ident{
     Ident::new(
         &name
