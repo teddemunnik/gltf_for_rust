@@ -715,7 +715,7 @@ fn load_extensions(
                 }
             });
 
-            /*while !open_types.is_empty() {
+            while !open_types.is_empty() {
                 let uri= open_types.pop().unwrap();
                 closed_types.insert(uri.clone());
                 if !extension_schema_store.is_local_uri(&uri){
@@ -728,7 +728,7 @@ fn load_extensions(
                     &mut open_types,
                     &closed_types,
                 ));
-            }*/
+            }
         }
 
         let output = File::create(format!("{generated_path}\\{extension_module_name}.rs")).unwrap();
