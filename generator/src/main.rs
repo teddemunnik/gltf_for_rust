@@ -863,6 +863,8 @@ fn load_extensions(
         let mut writer = BufWriter::new(output);
 
         let rust_file: syn::File = syn::parse2(quote! {
+            #![allow(clippy::all)]
+
             #(#extension_module)*
         })
         .unwrap();
@@ -954,24 +956,31 @@ fn main() {
     )
     .unwrap();
 
-    let output = File::create(format!("{generated_path}\\gltf.rs")).unwrap();
-    let mut writer = BufWriter::new(output);
 
     // Collect root types:
     let mut closed_types = HashSet::new();
     let mut open_types = Vec::new();
+
+    let mut types =Vec::new();
     open_types.push(SchemaUri::from("glTF.schema.json"));
 
     while !open_types.is_empty() {
         let id = open_types.pop().unwrap();
         closed_types.insert(id.clone());
         let schema = specification_schema_store.make_context(&id);
-
-        let rust = generate_rust(&schema, &mut open_types, &closed_types);
-
-        let file: syn::File = syn::parse2(rust).unwrap();
-        write!(&mut writer, "{}", prettyplease::unparse(&file));
+        types.push(generate_rust(&schema, &mut open_types, &closed_types));
     }
+
+    let rust = quote!{
+        #![allow(clippy::all)]
+
+        #(#types)*
+    };
+
+    let file : syn::File = syn::parse2(rust).unwrap();
+    let output = File::create(format!("{generated_path}\\gltf.rs")).unwrap();
+    let mut writer = BufWriter::new(output);
+    write!(writer, "{}", prettyplease::unparse(&file));
 
     write_root_module(generated_path, &generated_manifest);
 }
