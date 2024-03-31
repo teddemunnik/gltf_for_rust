@@ -906,7 +906,7 @@ fn main() {
     let specification_schema_store = create_specification_schema_store();
 
     let mut generated_manifest = GeneratedManifest::new();
-    load_extensions(&mut generated_manifest, "vendor\\gltf\\extensions\\2.0\\Khronos", generated_path, &specification_schema_store).unwrap();
+    //load_extensions(&mut generated_manifest, "vendor\\gltf\\extensions\\2.0\\Khronos", generated_path, &specification_schema_store).unwrap();
 
     let output = File::create(format!("{generated_path}\\gltf.rs")).unwrap();
     let mut writer = BufWriter::new(output);
