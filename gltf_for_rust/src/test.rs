@@ -10,7 +10,9 @@ fn test() {
     // Open the file in read-only mode with buffer.
     let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     d.pop();
-    d.push("vendor/gltf_sample_assets/Models/XmpMetadataRoundedCube/glTF/XmpMetadataRoundedCube.gltf");
+    d.push(
+        "vendor/gltf_sample_assets/Models/XmpMetadataRoundedCube/glTF/XmpMetadataRoundedCube.gltf",
+    );
 
     println!("{}", d.display());
 
@@ -20,9 +22,8 @@ fn test() {
     // Read the JSON contents of the file as an instance of `User`.
     let u: Gltf = serde_json::from_reader(reader).unwrap();
 
-    let extension : crate::generated::khr_xmp_json_ld::gltf::Extension = u.parse_extension().unwrap();
-
-
+    let extension: crate::generated::khr_xmp_json_ld::gltf::Extension =
+        u.parse_extension().unwrap();
 
     println!("{:#?}", extension);
 }

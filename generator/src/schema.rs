@@ -179,11 +179,11 @@ impl<'a> SchemaStore<'a> {
 
     pub fn make_context(&self, uri: &SchemaUri) -> SchemaContext {
         let (_, object) = self.lookup(uri).unwrap();
-        SchemaContext{
+        SchemaContext {
             schema_store: self,
             uri: Some(uri.clone()),
             is_uri_root: true,
-            schema: object
+            schema: object,
         }
     }
 

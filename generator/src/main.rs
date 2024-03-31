@@ -10,18 +10,17 @@ use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::fs::{OpenOptions, read_dir};
+use std::fs::{read_dir, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
 use std::vec::Vec;
 use std::{fs, fs::File, io::BufWriter};
 use thiserror::Error;
 
-fn plural_to_singular(maybe_plural: &str) -> String{
-    if maybe_plural.ends_with("s"){
-        String::from(&maybe_plural[..maybe_plural.len()-1])
-    }
-    else{
+fn plural_to_singular(maybe_plural: &str) -> String {
+    if maybe_plural.ends_with("s") {
+        String::from(&maybe_plural[..maybe_plural.len() - 1])
+    } else {
         String::from(maybe_plural)
     }
 }
@@ -67,9 +66,9 @@ enum Type {
     MapOfObjects,
 }
 
-struct ObjectPrototype{
+struct ObjectPrototype {
     comment: Option<String>,
-    properties: HashMap<String, Property>
+    properties: HashMap<String, Property>,
 }
 
 struct ObjectType {
@@ -77,7 +76,11 @@ struct ObjectType {
     prototype: ObjectPrototype,
 }
 
-fn handle_field(schema: &SchemaContext, open_types: &mut Vec<SchemaUri>, closed_types: &HashSet<SchemaUri>) -> Result<Type, Box<dyn Error>> {
+fn handle_field(
+    schema: &SchemaContext,
+    open_types: &mut Vec<SchemaUri>,
+    closed_types: &HashSet<SchemaUri>,
+) -> Result<Type, Box<dyn Error>> {
     if let Some(enumeration) = try_match_string_enum(schema) {
         return Ok(Type::Enum(enumeration));
     }
@@ -173,7 +176,11 @@ fn try_match_int_enum(schema: &SchemaContext) -> Option<()> {
     Some(())
 }
 
-fn handle_object_type(schema: &SchemaContext, open_types: &mut Vec<SchemaUri>, closed_types: &HashSet<SchemaUri>) -> Result<Option<Type>, Box<dyn Error>> {
+fn handle_object_type(
+    schema: &SchemaContext,
+    open_types: &mut Vec<SchemaUri>,
+    closed_types: &HashSet<SchemaUri>,
+) -> Result<Option<Type>, Box<dyn Error>> {
     // An object with no properties, but only additionalProperties, as a typed map
     if let Some(_) = schema
         .schema
@@ -188,21 +195,29 @@ fn handle_object_type(schema: &SchemaContext, open_types: &mut Vec<SchemaUri>, c
         }
     }
 
-    if schema.is_uri_root{
+    if schema.is_uri_root {
         let uri = schema.uri.as_ref().unwrap();
         return Ok(Some(Type::TypedObject(uri.clone())));
     }
 
     // Embedded object
-    let comment = schema.schema.metadata.as_ref().and_then(|metadata| metadata.description.clone());
+    let comment = schema
+        .schema
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.description.clone());
     let mut properties = HashMap::new();
     recursive_read_properties(&mut properties, &schema, open_types, closed_types);
-    Ok(Some(Type::EmbeddedObject(ObjectPrototype{
+    Ok(Some(Type::EmbeddedObject(ObjectPrototype {
         properties,
-        comment
+        comment,
     })))
 }
-fn handle_type_from_instance_type(schema: &SchemaContext, open_types: &mut Vec<SchemaUri>, closed_types: &HashSet<SchemaUri>) -> Result<Option<Type>, Box<dyn Error>> {
+fn handle_type_from_instance_type(
+    schema: &SchemaContext,
+    open_types: &mut Vec<SchemaUri>,
+    closed_types: &HashSet<SchemaUri>,
+) -> Result<Option<Type>, Box<dyn Error>> {
     // Try to match based on an instance type if one exists
     match &schema.schema.instance_type {
         Some(SingleOrVec::Single(a)) => match **a {
@@ -220,7 +235,11 @@ fn handle_type_from_instance_type(schema: &SchemaContext, open_types: &mut Vec<S
     }
 }
 
-fn handle_type(schema: &SchemaContext, open_types: &mut Vec<SchemaUri>, closed_types: &HashSet<SchemaUri>) -> Result<Type, Box<dyn Error>> {
+fn handle_type(
+    schema: &SchemaContext,
+    open_types: &mut Vec<SchemaUri>,
+    closed_types: &HashSet<SchemaUri>,
+) -> Result<Type, Box<dyn Error>> {
     if let Some(ty) = handle_type_from_instance_type(schema, open_types, closed_types)? {
         return Ok(ty);
     }
@@ -240,7 +259,11 @@ fn handle_type(schema: &SchemaContext, open_types: &mut Vec<SchemaUri>, closed_t
     Ok(Type::Any)
 }
 
-fn handle_array(schema: &SchemaContext, open_types: &mut Vec<SchemaUri>, closed_types: &HashSet<SchemaUri>) -> Result<Type, Box<dyn Error>> {
+fn handle_array(
+    schema: &SchemaContext,
+    open_types: &mut Vec<SchemaUri>,
+    closed_types: &HashSet<SchemaUri>,
+) -> Result<Type, Box<dyn Error>> {
     let array = schema.schema.array.as_ref().unwrap();
 
     let single_item_type = match array.items.as_ref() {
@@ -306,7 +329,10 @@ fn generate_rust_type(schema_store: &SchemaStore, ty: &Type, field_name: &String
         Type::TypedObject(uri) => generate_named_type_path(schema_store, uri),
         Type::MapOfObjects => quote! { Map<String, Value> },
         Type::EmbeddedObject(_) => {
-            let ident = Ident::new(&plural_to_singular(field_name).to_case(Case::UpperCamel), Span::call_site());
+            let ident = Ident::new(
+                &plural_to_singular(field_name).to_case(Case::UpperCamel),
+                Span::call_site(),
+            );
             quote! { #ident }
         }
     }
@@ -368,7 +394,9 @@ fn recursive_read_properties(
         });
 
         match property.ty {
-            Type::Any => property.ty = handle_field(&field_schema, open_types, closed_types).unwrap(),
+            Type::Any => {
+                property.ty = handle_field(&field_schema, open_types, closed_types).unwrap()
+            }
             _ => (),
         }
 
@@ -470,7 +498,10 @@ fn generate_struct_identifier(store: &SchemaStore, uri: &SchemaUri) -> Ident {
 
 fn generate_property_identifier(name: &str) -> Ident {
     Ident::new(
-        &name.to_case(Case::Snake).replace("type", "ty").replace("@", ""),
+        &name
+            .to_case(Case::Snake)
+            .replace("type", "ty")
+            .replace("@", ""),
         Span::call_site(),
     )
 }
@@ -490,7 +521,11 @@ impl RustTypeWriter {
     }
 }
 
-fn write_embedded_enum(property_name: &str, enumeration: &Enum, default: &Option<Value>) -> TokenStream{
+fn write_embedded_enum(
+    property_name: &str,
+    enumeration: &Enum,
+    default: &Option<Value>,
+) -> TokenStream {
     let rusty_enum_name = Ident::new(&property_name.to_case(Case::UpperCamel), Span::call_site());
     let enum_options = enumeration.options.iter().map(|option| {
         let identifier = Ident::new(
@@ -505,30 +540,39 @@ fn write_embedded_enum(property_name: &str, enumeration: &Enum, default: &Option
 
         let default_declaration = is_default.then(|| quote! { #[default] });
         quote! {
-                #[serde(rename=#option)]
-                #default_declaration
-                #identifier
-            }
+            #[serde(rename=#option)]
+            #default_declaration
+            #identifier
+        }
     });
 
-    let default_declaration = default
-        .as_ref()
-        .map(|_| quote! { #[derive(Default)] });
+    let default_declaration = default.as_ref().map(|_| quote! { #[derive(Default)] });
     quote! {
-            #[derive(Serialize, Deserialize, Debug)]
-            #default_declaration
-            enum #rusty_enum_name{
-                #(#enum_options),*
-            }
+        #[derive(Serialize, Deserialize, Debug)]
+        #default_declaration
+        enum #rusty_enum_name{
+            #(#enum_options),*
         }
+    }
 }
 
-fn write_embedded_type(property_name: &str, ty: &Type, default: &Option<Value>, schema_store: &SchemaStore) -> Option<TokenStream>{
-    match ty{
-        Type::Array(array) => write_embedded_type(property_name, array.item.as_ref(), &None, schema_store),
-        Type::EmbeddedObject(object_type) => Some(generate_structure(&plural_to_singular(property_name), object_type, schema_store)),
+fn write_embedded_type(
+    property_name: &str,
+    ty: &Type,
+    default: &Option<Value>,
+    schema_store: &SchemaStore,
+) -> Option<TokenStream> {
+    match ty {
+        Type::Array(array) => {
+            write_embedded_type(property_name, array.item.as_ref(), &None, schema_store)
+        }
+        Type::EmbeddedObject(object_type) => Some(generate_structure(
+            &plural_to_singular(property_name),
+            object_type,
+            schema_store,
+        )),
         Type::Enum(enumeration) => Some(write_embedded_enum(property_name, enumeration, default)),
-        _ => None
+        _ => None,
     }
 }
 
@@ -567,7 +611,9 @@ fn write_property(
         )
     });
 
-    if let Some(embedded_type) = write_embedded_type(name, &property.ty, &property.default, schema_store){
+    if let Some(embedded_type) =
+        write_embedded_type(name, &property.ty, &property.default, schema_store)
+    {
         writer.embedded_types.push(embedded_type);
     }
 
@@ -615,24 +661,29 @@ fn read_typed_object(
     closed_list: &HashSet<SchemaUri>,
 ) -> ObjectType {
     let name = get_raw_name(schema.schema_store, schema.uri.as_ref().unwrap());
-    let comment = schema.schema.metadata.as_ref().and_then(|metadata| metadata.description.clone());
+    let comment = schema
+        .schema
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.description.clone());
     let mut properties = HashMap::new();
     recursive_read_properties(&mut properties, &schema, open_list, closed_list);
     ObjectType {
         name,
-        prototype: ObjectPrototype{
+        prototype: ObjectPrototype {
             comment,
-            properties
-        }
+            properties,
+        },
     }
 }
 
-fn generate_structure(name: &str, object_prototype: &ObjectPrototype, schema_store: &SchemaStore) -> TokenStream {
+fn generate_structure(
+    name: &str,
+    object_prototype: &ObjectPrototype,
+    schema_store: &SchemaStore,
+) -> TokenStream {
     let mod_identifier = Ident::new(&name.to_case(Case::Snake), Span::call_site());
-    let type_identifier = Ident::new(
-        &name.to_case(Case::UpperCamel),
-        Span::call_site(),
-    );
+    let type_identifier = Ident::new(&name.to_case(Case::UpperCamel), Span::call_site());
 
     let mut property_tokens = Vec::new();
     let mut type_writer = RustTypeWriter::new();
@@ -653,19 +704,17 @@ fn generate_structure(name: &str, object_prototype: &ObjectPrototype, schema_sto
     let default_declarations = &type_writer.default_declarations;
 
     // Trait implementation if the object supports extensions
-    let gltf_object_trait = if object_prototype.properties.contains_key("extensions"){
-        Some(quote!{
+    let gltf_object_trait = if object_prototype.properties.contains_key("extensions") {
+        Some(quote! {
             impl crate::GltfObject for #type_identifier{
                 fn extensions(&self) -> &Option<Map<String, Value>>{
                     &self.extensions
                 }
             }
         })
-    }
-    else{
+    } else {
         None
     };
-
 
     quote! {
         mod #mod_identifier{
@@ -696,7 +745,11 @@ fn generate_rust(
     closed_types: &HashSet<SchemaUri>,
 ) -> TokenStream {
     let object_type = read_typed_object(schema, open_types, closed_types);
-    generate_structure(&object_type.name, &object_type.prototype, schema.schema_store)
+    generate_structure(
+        &object_type.name,
+        &object_type.prototype,
+        schema.schema_store,
+    )
 }
 
 #[allow(unused)]
@@ -738,7 +791,6 @@ fn load_extensions(
         let mut open_types = Vec::new();
         let mut closed_types = HashSet::new();
 
-
         for (name, schema) in extension_schema_store.schemas.iter() {
             // If a schema ends with {Prefix}.ExtensionName.schema.json it represents the extension object with the extension name on that object
             let suffix_start = match name.find(&extension_schema_suffix) {
@@ -770,12 +822,16 @@ fn load_extensions(
 
             let schema = extension_schema_store.make_context(&name.as_str().into());
 
-            let comment = schema.schema.metadata.as_ref().and_then(|metadata| metadata.description.clone());
+            let comment = schema
+                .schema
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.description.clone());
             let mut properties = HashMap::new();
             recursive_read_properties(&mut properties, &schema, &mut open_types, &closed_types);
-            let prototype = ObjectPrototype{
+            let prototype = ObjectPrototype {
                 properties,
-                comment
+                comment,
             };
 
             let structure = generate_structure("Extension", &prototype, schema.schema_store);
