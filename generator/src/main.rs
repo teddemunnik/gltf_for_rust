@@ -72,7 +72,7 @@ enum Type {
 
 struct ObjectPrototype {
     comment: Option<String>,
-    properties: HashMap<String, Property>,
+    properties: Vec<Property>
 }
 
 struct ObjectType {
@@ -205,12 +205,12 @@ fn handle_object_type(
         .metadata
         .as_ref()
         .and_then(|metadata| metadata.description.clone());
-    let mut properties = HashMap::new();
-    recursive_read_properties(&mut properties, schema, open_types, closed_types);
+    let mut properties = PropertyListBuilder::new();
+    properties.recursive_read_properties(&schema, open_types, closed_types);
 
-    let name = schema.uri.as_ref().and_then(|uri| naming::get_raw_name(schema));
+    let name = schema.uri.as_ref().and_then(|uri| naming::get_canonical_name(schema));
     Ok(Some(Type::EmbeddedObject{name, prototype: ObjectPrototype {
-        properties,
+        properties: properties.properties,
         comment,
     }}))
 }
@@ -297,8 +297,8 @@ fn handle_array(
 fn generate_named_type_path(store: &SchemaStore, uri: &SchemaUri) -> TokenStream {
     let context = store.make_context(uri);
     let ty = &store.lookup(uri).unwrap().0.ty;
-    let name = naming::get_raw_name(&context).unwrap();
-    let type_name = Ident::new(&name.to_case(Case::UpperCamel), Span::call_site());
+    let name = naming::get_canonical_name(&context).unwrap();
+    let type_name = Ident::new(&name, Span::call_site());
 
     match ty {
         SchemaType::Specification => quote! { crate::generated::gltf::#type_name},
@@ -356,70 +356,95 @@ fn schedule_types(open_types: &mut Vec<SchemaUri>, closed_types: &HashSet<Schema
 }
 
 struct Property {
+    name: String,
     ty: Type,
     optional: bool,
     default: Option<Value>,
     comment: Option<String>,
 }
 
-fn recursive_read_properties(
-    properties: &mut HashMap<String, Property>,
-    schema: &SchemaContext,
-    open_types: &mut Vec<SchemaUri>,
-    closed_types: &HashSet<SchemaUri>,
-) {
-    // First read properties from 'base' schemas
-    let base_schema = schema
-        .schema
-        .subschemas
-        .as_ref()
-        .and_then(|sub_schema| sub_schema.all_of.as_ref())
-        .and_then(|all_of| all_of.first());
-    if let Some(Schema::Object(base)) = base_schema {
-        let base = schema.resolve(base);
-        recursive_read_properties(properties, &base, open_types, closed_types);
+struct PropertyListBuilder{
+    by_name: HashMap<String, usize>,
+    properties: Vec<Property>,
+}
+
+impl PropertyListBuilder {
+    fn new() -> Self {
+        Self {
+            by_name: HashMap::new(),
+            properties: Vec::new(),
+        }
     }
 
-    // Then add our own properties
-    let object_schema = schema.schema.object.as_ref().unwrap();
-    for (name, field_schema) in object_schema.properties.iter() {
-        let field_schema = match field_schema {
-            Schema::Object(object) => object,
-            _ => unreachable!(),
-        };
-        let field_schema = schema.resolve(field_schema);
+    fn find_or_add(&mut self, name: &str) -> &mut Property{
+        if let Some(existing_id) = self.by_name.get(name){
+            &mut self.properties[*existing_id]
+        }else{
+            self.by_name.insert(name.to_string(), self.properties.len());
+            self.properties.push(Property{
+                name: name.to_string(),
+                ty: Type::Any,
+                optional: true,
+                comment: None,
+                default: None,
+            });
+            self.properties.last_mut().unwrap()
+        }
+    }
 
-        let property = properties.entry(name.clone()).or_insert(Property {
-            ty: Type::Any,
-            optional: true,
-            comment: None,
-            default: None,
-        });
-
-        if let Type::Any = property.ty {
-            property.ty = handle_field(&field_schema, open_types, closed_types).unwrap()
+    fn recursive_read_properties(
+        &mut self,
+        schema: &SchemaContext,
+        open_types: &mut Vec<SchemaUri>,
+        closed_types: &HashSet<SchemaUri>,
+    ) {
+        // First read properties from 'base' schemas
+        let base_schema = schema
+            .schema
+            .subschemas
+            .as_ref()
+            .and_then(|sub_schema| sub_schema.all_of.as_ref())
+            .and_then(|all_of| all_of.first());
+        if let Some(Schema::Object(base)) = base_schema {
+            let base = schema.resolve(base);
+            self.recursive_read_properties(&base, open_types, closed_types);
         }
 
-        schedule_types(open_types, closed_types, &property.ty);
+        // Then add our own properties
+        let object_schema = schema.schema.object.as_ref().unwrap();
+        for (name, field_schema) in object_schema.properties.iter() {
+            let field_schema = match field_schema {
+                Schema::Object(object) => object,
+                _ => unreachable!(),
+            };
+            let field_schema = schema.resolve(field_schema);
 
-        if property.comment.is_none() {
-            property.comment = field_schema
-                .schema
-                .metadata
-                .as_ref()
-                .and_then(|metadata| metadata.description.clone());
-        }
+            let property = self.find_or_add(name);
+            if let Type::Any = property.ty {
+                property.ty = handle_field(&field_schema, open_types, closed_types).unwrap()
+            }
 
-        if property.default.is_none() {
-            property.default = field_schema
-                .schema
-                .metadata
-                .as_ref()
-                .and_then(|metadata| metadata.default.clone());
-        }
+            schedule_types(open_types, closed_types, &property.ty);
 
-        if object_schema.required.contains(name) {
-            property.optional = false;
+            if property.comment.is_none() {
+                property.comment = field_schema
+                    .schema
+                    .metadata
+                    .as_ref()
+                    .and_then(|metadata| metadata.description.clone());
+            }
+
+            if property.default.is_none() {
+                property.default = field_schema
+                    .schema
+                    .metadata
+                    .as_ref()
+                    .and_then(|metadata| metadata.default.clone());
+            }
+
+            if object_schema.required.contains(name) {
+                property.optional = false;
+            }
         }
     }
 }
@@ -530,7 +555,6 @@ fn write_embedded_type(
 fn write_property(
     schema_store: &SchemaStore,
     writer: &mut RustTypeWriter,
-    name: &String,
     property: &Property,
 ) -> TokenStream {
 
@@ -540,24 +564,24 @@ fn write_property(
         (Type::Array(array_type), true)
         if array_type.min_length.is_some() && array_type.min_length.unwrap() == 1 =>
             {
-                generate_rust_type(schema_store, &property.ty, name)
+                generate_rust_type(schema_store, &property.ty, &property.name)
             }
 
         // Remove the Option for optional properties which have a default value specified.
         (_, true) if property.default.is_none() => {
-            let rust_type: TokenStream = generate_rust_type(schema_store, &property.ty, name);
+            let rust_type: TokenStream = generate_rust_type(schema_store, &property.ty, &property.name);
             quote! { Option::<#rust_type> }
         }
-        _ => generate_rust_type(schema_store, &property.ty, name),
+        _ => generate_rust_type(schema_store, &property.ty, &property.name),
     };
 
-    let rust_property_name = generate_property_name(name);
+    let rust_property_name = generate_property_name(&property.name);
 
     // For objects with an explicit default, create a default declaration
     let explicit_default_value = property
         .default
         .as_ref()
-        .map(|default| generate_default_value_token(&property.ty, default, name));
+        .map(|default| generate_default_value_token(&property.ty, default, &property.name));
     let default_declaration = explicit_default_value.as_ref().map(|_| {
         Ident::new(
             &format!("get_default_{}", &rust_property_name),
@@ -566,7 +590,7 @@ fn write_property(
     });
 
     if let Some(embedded_type) =
-        write_embedded_type(name, &property.ty, &property.default, schema_store)
+        write_embedded_type(&property.name, &property.ty, &property.default, schema_store)
     {
         writer.embedded_types.push(embedded_type);
     }
@@ -595,7 +619,8 @@ fn write_property(
     // rename to make it match the spec.
     let property_ident = Ident::new(&rust_property_name, Span::call_site());
     let rename_declaration =
-        if rust_property_name.partial_cmp(name) != Some(Ordering::Equal) {
+        if rust_property_name.partial_cmp(&property.name) != Some(Ordering::Equal) {
+            let name = &property.name;
             Some(quote![#[serde(rename = #name)]])
         } else {
             None
@@ -615,19 +640,19 @@ fn read_typed_object(
     open_list: &mut Vec<SchemaUri>,
     closed_list: &HashSet<SchemaUri>,
 ) -> ObjectType {
-    let name = naming::get_raw_name(schema).unwrap();
+    let name = naming::get_canonical_name(schema).unwrap();
     let comment = schema
         .schema
         .metadata
         .as_ref()
         .and_then(|metadata| metadata.description.clone());
-    let mut properties = HashMap::new();
-    recursive_read_properties(&mut properties, schema, open_list, closed_list);
+    let mut properties = PropertyListBuilder::new();
+    properties.recursive_read_properties(schema, open_list, closed_list);
     ObjectType {
         name,
         prototype: ObjectPrototype {
             comment,
-            properties,
+            properties: properties.properties,
         },
     }
 }
@@ -642,11 +667,10 @@ fn generate_structure(
 
     let mut property_tokens = Vec::new();
     let mut type_writer = RustTypeWriter::new();
-    for (name, property) in object_prototype.properties.iter() {
+    for property in object_prototype.properties.iter() {
         property_tokens.push(write_property(
             schema_store,
             &mut type_writer,
-            name,
             property,
         ));
     }
@@ -659,7 +683,7 @@ fn generate_structure(
     let default_declarations = &type_writer.default_declarations;
 
     // Trait implementation if the object supports extensions
-    let gltf_object_trait = if object_prototype.properties.contains_key("extensions") {
+    let gltf_object_trait = if object_prototype.properties.iter().any(|property| property.name.eq("extensions")) {
         Some(quote! {
             impl crate::GltfObject for #type_identifier{
                 fn extensions(&self) -> &Option<Map<String, Value>>{
@@ -776,10 +800,10 @@ fn load_extensions(
                 .metadata
                 .as_ref()
                 .and_then(|metadata| metadata.description.clone());
-            let mut properties = HashMap::new();
-            recursive_read_properties(&mut properties, &schema, &mut open_types, &closed_types);
+            let mut properties = PropertyListBuilder::new();
+            properties.recursive_read_properties(&schema, &mut open_types, &closed_types);
             let prototype = ObjectPrototype {
-                properties,
+                properties: properties.properties,
                 comment,
             };
 

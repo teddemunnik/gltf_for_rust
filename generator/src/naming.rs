@@ -4,12 +4,14 @@ use convert_case::{Case, Casing};
 use proc_macro2::{Ident, Span};
 use crate::schema::SchemaContext;
 
-pub fn get_raw_name(context: &SchemaContext) -> Option<String>{
+/// Creates a canonical name of a schema object
+/// The canonical name will use UpperCamelCase formatting
+pub fn get_canonical_name(context: &SchemaContext) -> Option<String>{
     // Use the definition name
     if context.is_uri_root{
         let uri = context.uri.as_ref().unwrap();
         if let Some(definition_name) = uri.definition_name() {
-            return Some(definition_name.to_lowercase());
+            return Some(definition_name.to_lowercase().to_case(Case::UpperCamel));
         }
     }
 
@@ -17,7 +19,7 @@ pub fn get_raw_name(context: &SchemaContext) -> Option<String>{
     if context.is_uri_root{
         if let Some(path) = context.uri.as_ref().unwrap().path.as_ref(){
             if let Some(no_suffix) =path.strip_suffix(".schema.json"){
-                return Some(no_suffix.replace("glTF", "gltf").replace(".", " ").to_case(Case::Title))
+                return Some(no_suffix.replace("glTF", "gltf").replace(".", " ").to_case(Case::UpperCamel))
             }
         }
     }
@@ -25,7 +27,7 @@ pub fn get_raw_name(context: &SchemaContext) -> Option<String>{
     // Or use the title
     let title = context.schema.metadata.as_ref().and_then(|metadata| metadata.title.as_ref());
     if let Some(title) = title{
-        let title = title.to_lowercase();
+        let title = title.to_lowercase().to_case(Case::UpperCamel);
 
         // Remove module prefix from title
         let prefix_end = title.find(' ');
