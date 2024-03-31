@@ -299,19 +299,19 @@ fn handle_array(schema: &SchemaContext) -> Result<Type, Box<dyn Error>> {
 }
 
 fn generate_rust_type(
-    schema_lookup: &HashMap<String, SchemaContext>,
+    schema_store: &SchemaStore,
     ty: &Type,
     field_name: &String,
 ) -> TokenStream {
     match ty {
         Type::Any => quote! { serde_json::Value },
         Type::Array(array_type) => {
-            let item_rust_type = generate_rust_type(schema_lookup, &array_type.item, field_name);
+            let item_rust_type = generate_rust_type(schema_store, &array_type.item, field_name);
             return quote! { Vec::< #item_rust_type > };
         }
         Type::FixedArray(array_type) => {
             let fixed_length = array_type.length as usize;
-            let rust_item_type = generate_rust_type(schema_lookup, &array_type.item, field_name);
+            let rust_item_type = generate_rust_type(schema_store, &array_type.item, field_name);
             quote! { [#rust_item_type; #fixed_length ]}
         }
         Type::Boolean => quote! { bool },
@@ -323,10 +323,9 @@ fn generate_rust_type(
             quote! { #ident }
         }
         Type::TypedObject(id) => {
-            let metadata = schema_lookup
-                .get(id)
+            let metadata =schema_store
+                .lookup(id)
                 .unwrap()
-                .schema
                 .metadata
                 .as_ref()
                 .unwrap();
@@ -491,10 +490,10 @@ impl<'a> RustTypeWriter<'a> {
 }
 
 fn write_property(
+    schema_store: &SchemaStore,
     writer: &mut RustTypeWriter,
     name: &String,
     property: &Property,
-    schema_lookup: &HashMap<String, SchemaContext>,
 ) -> TokenStream {
     // Ensure that the type referenced by our property will also be written out
     schedule_types(writer.open_types, writer.closed_types, &property.ty);
@@ -505,15 +504,15 @@ fn write_property(
         (Type::Array(array_type), true)
             if array_type.min_length.is_some() && array_type.min_length.unwrap() == 1 =>
         {
-            generate_rust_type(schema_lookup, &property.ty, name)
+            generate_rust_type(schema_store, &property.ty, name)
         }
 
         // Remove the Option for optional properties which have a default value specified.
         (_, true) if property.default.is_none() => {
-            let rust_type: TokenStream = generate_rust_type(schema_lookup, &property.ty, name);
+            let rust_type: TokenStream = generate_rust_type(schema_store, &property.ty, name);
             quote! { Option::<#rust_type> }
         }
-        _ => generate_rust_type(schema_lookup, &property.ty, name),
+        _ => generate_rust_type(schema_store, &property.ty, name),
     };
 
     // Embedded enums
@@ -605,7 +604,6 @@ fn generate_structure(
     mod_identifier: &Ident,
     open_types: &mut Vec<String>,
     closed_types: &HashSet<String>,
-    schema_lookup: &HashMap<String, SchemaContext>,
     name: &Ident,
     comment: Option<&String>,
     schema: &SchemaContext,
@@ -616,10 +614,10 @@ fn generate_structure(
     let mut type_writer = RustTypeWriter::new(open_types, closed_types);
     for (name, property) in properties.iter() {
         property_tokens.push(write_property(
+            schema.schema_store,
             &mut type_writer,
             name,
             property,
-            schema_lookup,
         ));
     }
     let doc = match comment {
@@ -650,7 +648,6 @@ fn generate_structure(
 }
 
 fn write_rust(
-    schema_lookup: &HashMap<String, SchemaContext>,
     schema: &SchemaContext,
     writer: &mut dyn std::io::Write,
     open_types: &mut Vec<String>,
@@ -666,7 +663,6 @@ fn write_rust(
         &mod_identifier,
         open_types,
         closed_types,
-        schema_lookup,
         &name,
         comment,
         schema,
@@ -766,6 +762,15 @@ impl<'a> SchemaStore<'a> {
         Ok(())
     }
 
+    fn make_context(&self, name: &str) -> SchemaContext{
+        let root_schema = self.schemas.get(name).unwrap();
+
+        SchemaContext{
+            schema_store: self,
+            schema: &root_schema.schema,
+        }
+    }
+
     fn lookup(&self, name: &str) -> Option<&SchemaObject> {
         // Try in base first
         if let Some(base) = self.base {
@@ -858,8 +863,7 @@ fn load_extensions(
 
             extension_schema_store.read_root(&file_name).unwrap();
 
-            let lookup = build_schena_lookup(&extension_schema_store);
-            let schema = lookup.get(&file_name).unwrap();
+            let schema = extension_schema_store.make_context(&file_name);
 
             let mut open_types = Vec::new();
             let closed_types = HashSet::new();
@@ -868,10 +872,9 @@ fn load_extensions(
                 &base_object_module_ident,
                 &mut open_types,
                 &closed_types,
-                &lookup,
                 &Ident::new("Extension", Span::call_site()),
                 extension_doc.as_ref(),
-                schema,
+                &schema,
             ));
         }
 
@@ -957,39 +960,6 @@ fn create_specification_schema_store() -> SchemaStore<'static> {
     specification_schema.read_root("glTF.schema.json").unwrap();
     specification_schema
 }
-
-fn add_schema_store_lookup<'a, 'b>(
-    schema_store: &'a SchemaStore,
-    lookup: &mut HashMap<String, SchemaContext<'b>>,
-) where
-    'a: 'b,
-{
-    // Base schemas
-    if let Some(base) = schema_store.base {
-        add_schema_store_lookup(base, lookup);
-    }
-
-    // My schemas
-    for (path, schema) in schema_store.schemas.iter() {
-        lookup.insert(
-            path.clone(),
-            SchemaContext {
-                schema_store: &schema_store,
-                schema: &schema.schema,
-            },
-        );
-    }
-}
-
-fn build_schena_lookup<'a, 'b>(schema_store: &'b SchemaStore) -> HashMap<String, SchemaContext<'a>>
-where
-    'b: 'a,
-{
-    let mut schema_lookup = HashMap::new();
-    add_schema_store_lookup(schema_store, &mut schema_lookup);
-    schema_lookup
-}
-
 fn main() {
     // Recreate the generated directory
     let generated_path = "gltf_for_rust\\src\\generated";
@@ -1003,8 +973,6 @@ fn main() {
 
     let output = File::create(format!("{generated_path}\\gltf.rs")).unwrap();
     let mut writer = BufWriter::new(output);
-
-    let schema_lookup = build_schena_lookup(&specification_schema_store);
 
     // Collect root types:
     let mut closed_types = HashSet::new();
@@ -1024,11 +992,10 @@ fn main() {
     while !open_types.is_empty() {
         let id = open_types.pop().unwrap();
         closed_types.insert(id.clone());
-        let schema = *schema_lookup.get(&id).as_ref().unwrap();
+        let schema = specification_schema_store.make_context(&id);
 
         write_rust(
-            &schema_lookup,
-            schema,
+            &schema,
             &mut writer,
             &mut open_types,
             &closed_types,
