@@ -9,9 +9,8 @@ use std::path::PathBuf;
 fn test() {
     // Open the file in read-only mode with buffer.
     let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    d.pop();
     d.push(
-        "vendor/gltf_sample_assets/Models/XmpMetadataRoundedCube/glTF/XmpMetadataRoundedCube.gltf",
+        "../vendor/gltf_sample_assets/Models/XmpMetadataRoundedCube/glTF/XmpMetadataRoundedCube.gltf",
     );
 
     println!("{}", d.display());
