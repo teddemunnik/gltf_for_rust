@@ -515,7 +515,7 @@ fn write_embedded_enum(
     let rusty_enum_name = Ident::new(&property_name.to_case(Case::UpperCamel), Span::call_site());
     let enum_options = enumeration.options.iter().map(|option| {
         let identifier = Ident::new(
-            &option.to_case(Case::UpperCamel).replace('/', ""),
+            &option.replace('/', " ").replace('.', " ").to_case(Case::UpperCamel),
             Span::call_site(),
         );
 
@@ -838,7 +838,7 @@ fn load_extensions(
             });
         }
 
-        /*while let Some(uri) = open_types.pop() {
+        while let Some(uri) = open_types.pop() {
             closed_types.insert(uri.clone());
             if !extension_schema_store.is_local_uri(&uri) {
                 continue;
@@ -846,7 +846,7 @@ fn load_extensions(
 
             let schema = extension_schema_store.make_context(&uri);
             extension_module.push(generate_rust(&schema, &mut open_types, &closed_types));
-        }*/
+        }
 
         let output = File::create(format!("{generated_path}\\{extension_module_name}.rs")).unwrap();
         let mut writer = BufWriter::new(output);
