@@ -1,4 +1,5 @@
 mod schema;
+mod naming;
 
 use crate::schema::{SchemaType, SchemaUri};
 use convert_case::{Case, Casing, StateConverter};
@@ -16,6 +17,7 @@ use std::path::PathBuf;
 use std::vec::Vec;
 use std::{fs, fs::File, io::BufWriter};
 use thiserror::Error;
+use crate::naming::{generate_option_identifier, generate_property_name};
 
 fn plural_to_singular(maybe_plural: &str) -> String {
     if let Some(singular) = maybe_plural.strip_suffix("ies"){
@@ -206,7 +208,7 @@ fn handle_object_type(
     let mut properties = HashMap::new();
     recursive_read_properties(&mut properties, schema, open_types, closed_types);
 
-    let name = schema.uri.as_ref().and_then(|uri| get_raw_name(schema));
+    let name = schema.uri.as_ref().and_then(|uri| naming::get_raw_name(schema));
     Ok(Some(Type::EmbeddedObject{name, prototype: ObjectPrototype {
         properties,
         comment,
@@ -295,7 +297,7 @@ fn handle_array(
 fn generate_named_type_path(store: &SchemaStore, uri: &SchemaUri) -> TokenStream {
     let context = store.make_context(uri);
     let ty = &store.lookup(uri).unwrap().0.ty;
-    let name = get_raw_name(&context).unwrap();
+    let name = naming::get_raw_name(&context).unwrap();
     let type_name = Ident::new(&name.to_case(Case::UpperCamel), Span::call_site());
 
     match ty {
@@ -457,57 +459,6 @@ fn generate_default_value_token(ty: &Type, default: &Value, field_name: &String)
     }
 }
 
-fn get_raw_name(context: &SchemaContext) -> Option<String>{
-    // Use the definition name
-    if context.is_uri_root{
-        let uri = context.uri.as_ref().unwrap();
-        if let Some(definition_name) = uri.definition_name() {
-            return Some(definition_name.to_lowercase());
-        }
-    }
-
-    // Get the schema name
-    if context.is_uri_root{
-        if let Some(path) = context.uri.as_ref().unwrap().path.as_ref(){
-            if let Some(no_suffix) =path.strip_suffix(".schema.json"){
-                return Some(no_suffix.replace("glTF", "gltf").replace(".", " ").to_case(Case::Title))
-            }
-        }
-    }
-
-    // Or use the title
-    let title = context.schema.metadata.as_ref().and_then(|metadata| metadata.title.as_ref());
-    if let Some(title) = title{
-        let title = title.to_lowercase();
-
-        // Remove module prefix from title
-        let prefix_end = title.find(' ');
-        if let Some(prefix_end) = prefix_end {
-            if title[0..prefix_end].starts_with("khr_") {
-                return Some(String::from(title[(prefix_end + 1)..].to_string()))
-            }
-        }
-        Some(title.clone())
-    }else{
-        None
-    }
-}
-
-fn generate_property_identifier(name: &str) -> Ident {
-    // Replace keywords
-    let name = match name.to_lowercase().as_str(){
-        "type" => "ty",
-        _ => name
-    };
-
-    // Remove unsupported characters
-    let name = name.replace('@', "");
-
-    // Convert to the field snake case
-    let name = name.to_case(Case::Snake);
-
-    Ident::new(&name, Span::call_site())
-}
 
 /// Writes a rust type into a unique module with helper functions and type surrounding it
 struct RustTypeWriter {
@@ -531,10 +482,7 @@ fn write_embedded_enum(
 ) -> TokenStream {
     let rusty_enum_name = Ident::new(&property_name.to_case(Case::UpperCamel), Span::call_site());
     let enum_options = enumeration.options.iter().map(|option| {
-        let identifier = Ident::new(
-            &option.replace('/', " ").replace('.', " ").to_case(Case::UpperCamel),
-            Span::call_site(),
-        );
+        let identifier = generate_option_identifier(option);
 
         let is_default = match &default {
             Some(Value::String(string)) => string == option,
@@ -603,7 +551,7 @@ fn write_property(
         _ => generate_rust_type(schema_store, &property.ty, name),
     };
 
-    let rust_property_name = name.to_case(Case::Snake).replace("type", "ty").replace('@', "");
+    let rust_property_name = generate_property_name(name);
 
     // For objects with an explicit default, create a default declaration
     let explicit_default_value = property
@@ -667,7 +615,7 @@ fn read_typed_object(
     open_list: &mut Vec<SchemaUri>,
     closed_list: &HashSet<SchemaUri>,
 ) -> ObjectType {
-    let name = get_raw_name(schema).unwrap();
+    let name = naming::get_raw_name(schema).unwrap();
     let comment = schema
         .schema
         .metadata
@@ -689,8 +637,8 @@ fn generate_structure(
     object_prototype: &ObjectPrototype,
     schema_store: &SchemaStore,
 ) -> TokenStream {
-    let mod_identifier = &generate_property_identifier(name);
-    let type_identifier = Ident::new(&name.to_case(Case::UpperCamel), Span::call_site());
+    let mod_identifier = &naming::generate_property_identifier(name);
+    let type_identifier = naming::generate_type_identifier(name);
 
     let mut property_tokens = Vec::new();
     let mut type_writer = RustTypeWriter::new();
@@ -816,13 +764,7 @@ fn load_extensions(
                 &extension_name, &base_object_name
             );
 
-            let base_object_module_ident = Ident::new(
-                &base_object_name
-                    .replace('.', " ")
-                    .replace("glTF", "gltf")
-                    .to_case(Case::Snake),
-                Span::call_site(),
-            );
+            let base_object_module_ident = naming::generate_base_module_identifier(base_object_name);
             let extension_doc = Some(format!(
                 "The {extension_name} extension for {base_object_name}"
             ));
