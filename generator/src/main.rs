@@ -177,18 +177,15 @@ fn handle_object_type(schema: &SchemaContext) -> Result<Option<Type>, Box<dyn Er
         .as_ref()
     {
         if schema.schema.object.as_ref().unwrap().properties.is_empty() {
-            Ok(Some(Type::MapOfObjects))
-        } else {
-            unreachable!();
+            return Ok(Some(Type::MapOfObjects));
         }
+    }
 
-        // If the object has a title, it's a typed object
-    } else if let Some(uri) = &schema.uri{
+    if let Some(uri) = &schema.uri{
         Ok(Some(Type::TypedObject(uri.clone())))
     } else{
         Ok(None)
     }
-
 }
 fn handle_type_from_instance_type(schema: &SchemaContext) -> Result<Option<Type>, Box<dyn Error>>{
     // Try to match based on an instance type if one exists
@@ -281,16 +278,9 @@ fn generate_rust_type(
             let ident = Ident::new(&field_name.to_case(Case::UpperCamel), Span::call_site());
             quote! { #ident }
         }
-        Type::TypedObject(id) => {
-            let metadata =schema_store
-                .lookup(id)
-                .unwrap()
-                .metadata
-                .as_ref()
-                .unwrap();
-
-            let module = generate_module_identifier(metadata);
-            let ident = generate_struct_identifier(metadata);
+        Type::TypedObject(uri) => {
+            let module = generate_module_identifier(schema_store, uri);
+            let ident = generate_struct_identifier(schema_store, uri);
             quote! { super::#module::#ident }
         }
         Type::MapOfObjects => quote! { Map<String, Value> },
@@ -408,12 +398,30 @@ fn generate_default_value_token(ty: &Type, default: &Value, field_name: &String)
     }
 }
 
-fn generate_module_identifier(metadata: &Box<Metadata>) -> Ident {
-    let title = metadata.as_ref().title.as_ref().unwrap().to_lowercase();
+fn get_raw_name(store: &SchemaStore, uri: &SchemaUri) -> String{
+    if let Some(definition_name) = uri.definition_name(){
+        return definition_name.to_string()
+    }
+
+    let title = store.lookup(uri).unwrap().metadata.as_ref().unwrap().title.as_ref().unwrap().to_lowercase();
+
+    // Remove module prefix from title
+    let prefix_end= title.find(' ');
+    if let Some(prefix_end) = prefix_end{
+        if title[0..prefix_end].starts_with("khr_"){
+            return title[(prefix_end+1)..].to_string()
+        }
+    }
+
+    title
+}
+
+fn generate_module_identifier(store: &SchemaStore, uri: &SchemaUri) -> Ident {
+    let title = get_raw_name(store, uri);
     Ident::new(&title.to_case(Case::Snake), Span::call_site())
 }
-fn generate_struct_identifier(metadata: &Box<Metadata>) -> Ident {
-    let title = metadata.as_ref().title.as_ref().unwrap().to_lowercase();
+fn generate_struct_identifier(store: &SchemaStore, uri: &SchemaUri) -> Ident {
+    let title = get_raw_name(store, uri);
     Ident::new(&title.to_case(Case::UpperCamel), Span::call_site())
 }
 
@@ -612,9 +620,9 @@ fn write_rust(
 ) {
     let metadata = schema.schema.metadata.as_ref().unwrap();
 
-    let mod_identifier = generate_module_identifier(metadata);
+    let mod_identifier = generate_module_identifier(schema.schema_store, schema.uri.as_ref().unwrap());
     let comment = metadata.description.as_ref();
-    let name = generate_struct_identifier(metadata);
+    let name = generate_struct_identifier(schema.schema_store, schema.uri.as_ref().unwrap());
 
     let tokens = generate_structure(
         &mod_identifier,
@@ -683,7 +691,7 @@ fn load_extensions(
             );
 
             let base_object_module_ident = Ident::new(
-                &base_object_name.replace(".", " ").to_case(Case::Snake),
+                &base_object_name.replace(".", " ").to_lowercase().to_case(Case::Snake),
                 Span::call_site(),
             );
             let extension_doc = Some(format!(
@@ -789,8 +797,8 @@ fn main() {
     // Create the core specification schema store
     let specification_schema_store = SchemaStore::load(&PathBuf::from("vendor\\gltf\\specification\\2.0\\schema"), None).unwrap();
 
-    let generated_manifest = GeneratedManifest::new();
-    //load_extensions(&mut generated_manifest, "vendor\\gltf\\extensions\\2.0\\Khronos", generated_path, &specification_schema_store).unwrap();
+    let mut generated_manifest = GeneratedManifest::new();
+    load_extensions(&mut generated_manifest, "vendor\\gltf\\extensions\\2.0\\Khronos", generated_path, &specification_schema_store).unwrap();
 
     let output = File::create(format!("{generated_path}\\gltf.rs")).unwrap();
     let mut writer = BufWriter::new(output);
