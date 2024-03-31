@@ -316,7 +316,7 @@ fn generate_rust_type(
         Type::Integer => quote! { i64 },
         Type::Number => quote! { f64 },
         Type::String => quote! { String },
-        Type::Enum(enumeration) => {
+        Type::Enum(_) => {
             let ident = Ident::new(&field_name.to_case(Case::UpperCamel), Span::call_site());
             quote! { #ident }
         }
@@ -418,7 +418,7 @@ fn recursive_read_properties(properties: &mut HashMap<String, Property>, schema:
 fn generate_default_value_token(ty: &Type, default: &Value, field_name: &String) -> TokenStream {
     match ty {
         Type::Any => unimplemented!(),
-        Type::Array(array) => quote! {{ Vec::default(); }},
+        Type::Array(_) => quote! {{ Vec::default(); }},
         Type::FixedArray(array) => {
             let array_items = default
                 .as_array()
@@ -431,7 +431,7 @@ fn generate_default_value_token(ty: &Type, default: &Value, field_name: &String)
             let value = default.as_bool().unwrap();
             quote! { #value }
         }
-        Type::Enum(enumeration) => {
+        Type::Enum(_) => {
             let ident = Ident::new(&field_name.to_case(Case::UpperCamel), Span::call_site());
             quote! { #ident::default() }
         }
@@ -472,7 +472,6 @@ struct RustTypeWriter<'a> {
     closed_types: &'a HashSet<String>,
     embedded_enums: Vec<TokenStream>,
     default_declarations: Vec<TokenStream>,
-    type_declaration: Option<TokenStream>,
 }
 
 impl<'a> RustTypeWriter<'a> {
@@ -485,7 +484,6 @@ impl<'a> RustTypeWriter<'a> {
             closed_types,
             embedded_enums: Vec::new(),
             default_declarations: Vec::new(),
-            type_declaration: None,
         }
     }
 }
@@ -724,6 +722,7 @@ impl<'a> SchemaStore<'a> {
         }
     }
 
+    #[allow(unused)]
     fn new_extension(base: &'a SchemaStore<'a>, folder: &Path) -> Self {
         Self {
             folder: PathBuf::from(folder),
@@ -779,6 +778,7 @@ impl<'a> SchemaStore<'a> {
     }
 }
 
+#[allow(unused)]
 fn load_extensions(
     generated_manifest: &mut GeneratedManifest,
     extensions_path: &str,
@@ -796,7 +796,7 @@ fn load_extensions(
     {
         // Figure out the extension name and vendor prefix
         let extension_name = entry.file_name().to_string_lossy().to_string();
-        let vendor_prefix = extension_name
+        let _= extension_name
             .split('_')
             .next()
             .expect("Extension does not start with vendor prefix followed by an underscore");
@@ -818,7 +818,7 @@ fn load_extensions(
                 println!("Extension {} does not provide any schemas", extension_name);
                 continue;
             }
-            Err(e) => return Err(String::from("Failed to open schemas directory")),
+            Err(_) => return Err(String::from("Failed to open schemas directory")),
         };
 
         let mut extension_module = Vec::new();
@@ -996,7 +996,7 @@ fn main() {
     // Create the core specification schema store
     let specification_schema_store = create_specification_schema_store();
 
-    let mut generated_manifest = GeneratedManifest::new();
+    let generated_manifest = GeneratedManifest::new();
     //load_extensions(&mut generated_manifest, "vendor\\gltf\\extensions\\2.0\\Khronos", generated_path, &specification_schema_store).unwrap();
 
     let output = File::create(format!("{generated_path}\\gltf.rs")).unwrap();
