@@ -59,7 +59,7 @@ enum Type {
     Array(ArrayType),
     FixedArray(FixedArrayType),
     TypedObject(SchemaUri),
-    EmbeddedObject(ObjectPrototype),
+    EmbeddedObject{name: Option<String>, prototype:ObjectPrototype},
     String,
     Boolean,
     Number,
@@ -205,10 +205,12 @@ fn handle_object_type(
         .and_then(|metadata| metadata.description.clone());
     let mut properties = HashMap::new();
     recursive_read_properties(&mut properties, schema, open_types, closed_types);
-    Ok(Some(Type::EmbeddedObject(ObjectPrototype {
+
+    let name = schema.uri.as_ref().and_then(|uri| get_raw_name(schema));
+    Ok(Some(Type::EmbeddedObject{name, prototype: ObjectPrototype {
         properties,
         comment,
-    })))
+    }}))
 }
 
 fn handle_type_from_instance_type(
@@ -291,8 +293,9 @@ fn handle_array(
 }
 
 fn generate_named_type_path(store: &SchemaStore, uri: &SchemaUri) -> TokenStream {
+    let context = store.make_context(uri);
     let ty = &store.lookup(uri).unwrap().0.ty;
-    let name = get_raw_name(store, uri);
+    let name = get_raw_name(&context).unwrap();
     let type_name = Ident::new(&name.to_case(Case::UpperCamel), Span::call_site());
 
     match ty {
@@ -326,7 +329,7 @@ fn generate_rust_type(schema_store: &SchemaStore, ty: &Type, field_name: &String
         }
         Type::TypedObject(uri) => generate_named_type_path(schema_store, uri),
         Type::MapOfObjects => quote! { Map<String, Value> },
-        Type::EmbeddedObject(_) => {
+        Type::EmbeddedObject{name, prototype} => {
             let ident = Ident::new(
                 &plural_to_singular(field_name).to_case(Case::UpperCamel),
                 Span::call_site(),
@@ -450,46 +453,49 @@ fn generate_default_value_token(ty: &Type, default: &Value, field_name: &String)
         }
         Type::String => unimplemented!(),
         Type::TypedObject(_) => unimplemented!(),
-        Type::EmbeddedObject(_) => unimplemented!(),
+        Type::EmbeddedObject{name, prototype} => unimplemented!(),
     }
 }
 
-fn get_raw_name(store: &SchemaStore, uri: &SchemaUri) -> String {
-    if let Some(definition_name) = uri.definition_name() {
-        return definition_name.to_lowercase();
-    }
-
-    let title = store
-        .lookup(uri)
-        .unwrap()
-        .1
-        .metadata
-        .as_ref()
-        .unwrap()
-        .title
-        .as_ref()
-        .unwrap()
-        .to_lowercase();
-
-    // Remove module prefix from title
-    let prefix_end = title.find(' ');
-    if let Some(prefix_end) = prefix_end {
-        if title[0..prefix_end].starts_with("khr_") {
-            return title[(prefix_end + 1)..].to_string();
+fn get_raw_name(context: &SchemaContext) -> Option<String>{
+    // Use the definition name
+    if context.is_uri_root{
+        let uri = context.uri.as_ref().unwrap();
+        if let Some(definition_name) = uri.definition_name() {
+            return Some(definition_name.to_lowercase());
         }
     }
 
-    title
+    // Or use the title
+    let title = context.schema.metadata.as_ref().and_then(|metadata| metadata.title.as_ref());
+    if let Some(title) = title{
+        // Remove module prefix from title
+        let prefix_end = title.find(' ');
+        if let Some(prefix_end) = prefix_end {
+            if title[0..prefix_end].starts_with("khr_") {
+                return Some(String::from(title[(prefix_end + 1)..].to_string()))
+            }
+        }
+        Some(title.clone())
+    }else{
+        None
+    }
 }
 
 fn generate_property_identifier(name: &str) -> Ident {
-    Ident::new(
-        &name
-            .to_case(Case::Snake)
-            .replace("type", "ty")
-            .replace('@', ""),
-        Span::call_site(),
-    )
+    // Replace keywords
+    let name = match name.to_lowercase().as_str(){
+        "type" => "ty",
+        _ => name
+    };
+
+    // Remove unsupported characters
+    let name = name.replace('@', "");
+
+    // Convert to the field snake case
+    let name = name.to_case(Case::Snake);
+
+    Ident::new(&name, Span::call_site())
 }
 
 /// Writes a rust type into a unique module with helper functions and type surrounding it
@@ -552,9 +558,9 @@ fn write_embedded_type(
         Type::Array(array) => {
             write_embedded_type(property_name, array.item.as_ref(), &None, schema_store)
         }
-        Type::EmbeddedObject(object_type) => Some(generate_structure(
-            &plural_to_singular(property_name),
-            object_type,
+        Type::EmbeddedObject{name,prototype} => Some(generate_structure(
+            &name.clone().unwrap_or_else(|| plural_to_singular(property_name)),
+            prototype,
             schema_store,
         )),
         Type::Enum(enumeration) => Some(write_embedded_enum(property_name, enumeration, default)),
@@ -650,7 +656,7 @@ fn read_typed_object(
     open_list: &mut Vec<SchemaUri>,
     closed_list: &HashSet<SchemaUri>,
 ) -> ObjectType {
-    let name = get_raw_name(schema.schema_store, schema.uri.as_ref().unwrap());
+    let name = get_raw_name(schema).unwrap();
     let comment = schema
         .schema
         .metadata
