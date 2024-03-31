@@ -49,6 +49,7 @@ enum Type {
     Array(ArrayType),
     FixedArray(FixedArrayType),
     TypedObject(SchemaUri),
+    EmbeddedObject,
     String,
     Boolean,
     Number,
@@ -174,11 +175,12 @@ fn handle_object_type(schema: &SchemaContext) -> Result<Option<Type>, Box<dyn Er
         }
     }
 
-    if let Some(uri) = &schema.uri {
-        Ok(Some(Type::TypedObject(uri.clone())))
-    } else {
-        Ok(None)
+    if schema.is_uri_root{
+        let uri = schema.uri.as_ref().unwrap();
+        return Ok(Some(Type::TypedObject(uri.clone())));
     }
+
+    Ok(Some(Type::EmbeddedObject))
 }
 fn handle_type_from_instance_type(schema: &SchemaContext) -> Result<Option<Type>, Box<dyn Error>> {
     // Try to match based on an instance type if one exists
@@ -283,6 +285,10 @@ fn generate_rust_type(schema_store: &SchemaStore, ty: &Type, field_name: &String
         }
         Type::TypedObject(uri) => generate_named_type_path(schema_store, uri),
         Type::MapOfObjects => quote! { Map<String, Value> },
+        Type::EmbeddedObject => {
+            let ident = Ident::new(&field_name.to_case(Case::UpperCamel), Span::call_site());
+            quote! { #ident }
+        }
     }
 }
 
@@ -401,6 +407,7 @@ fn generate_default_value_token(ty: &Type, default: &Value, field_name: &String)
         }
         Type::String => unimplemented!(),
         Type::TypedObject(_) => unimplemented!(),
+        Type::EmbeddedObject => unimplemented!(),
     }
 }
 
@@ -497,6 +504,7 @@ fn write_embedded_enum(property_name: &str, enumeration: &Enum, default: &Option
 }
 fn write_embedded_type(property_name: &str, ty: &Type, default: &Option<Value>) -> Option<TokenStream>{
     match ty{
+        Type::Array(array) => write_embedded_type(property_name, array.item.as_ref(), &None),
         Type::Enum(enumeration) => Some(write_embedded_enum(property_name, enumeration, default)),
         _ => None
     }

@@ -51,6 +51,7 @@ pub struct SchemaContext<'a> {
     pub schema_store: &'a SchemaStore<'a>,
     pub schema: &'a SchemaObject,
     pub uri: Option<SchemaUri>,
+    pub is_uri_root: bool,
 }
 
 impl<'a> SchemaContext<'a> {
@@ -70,6 +71,7 @@ impl<'a> SchemaContext<'a> {
             return SchemaContext {
                 schema_store: self.schema_store,
                 uri: Some(reference.as_str().into()),
+                is_uri_root: true,
                 schema: self
                     .schema_store
                     .lookup(&reference.as_str().into())
@@ -81,6 +83,7 @@ impl<'a> SchemaContext<'a> {
         SchemaContext {
             schema_store: self.schema_store,
             uri: self.uri.clone(),
+            is_uri_root: false,
             schema,
         }
     }
@@ -180,6 +183,7 @@ impl<'a> SchemaStore<'a> {
         SchemaContext {
             schema_store: self,
             uri: Some(uri.clone()),
+            is_uri_root: true,
             schema: &root_schema.schema,
         }
     }
