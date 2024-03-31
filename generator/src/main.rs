@@ -51,7 +51,6 @@ enum Type {
     Array(ArrayType),
     FixedArray(FixedArrayType),
     TypedObject(String),
-    UntypedObject,
     String,
     Boolean,
     Number,
@@ -64,6 +63,7 @@ enum Type {
 struct SchemaContext<'a> {
     schema_store: &'a SchemaStore<'a>,
     schema: &'a SchemaObject,
+    id: Option<String>,
 }
 
 impl<'a> SchemaContext<'a> {
@@ -72,17 +72,20 @@ impl<'a> SchemaContext<'a> {
         'b: 'c,
     {
         if schema.is_ref() {
+            let reference = schema.reference.as_ref().unwrap();
             return SchemaContext {
                 schema_store: self.schema_store,
+                id: Some(reference.clone()),
                 schema: self
                     .schema_store
-                    .lookup(schema.reference.as_ref().unwrap())
+                    .lookup(reference)
                     .unwrap(),
             };
         }
 
         SchemaContext {
             schema_store: self.schema_store,
+            id: self.id.clone(),
             schema,
         }
     }
@@ -96,14 +99,7 @@ fn handle_field(schema: &SchemaContext) -> Result<Type, Box<dyn Error>> {
         {
             let the_schema = schema.resolve(single_all_of);
             if let Some(_) = the_schema.schema.object {
-                if let Some(id) = the_schema
-                    .schema
-                    .metadata
-                    .as_ref()
-                    .and_then(|md| md.id.as_ref())
-                {
-                    return Ok(Type::TypedObject(id.clone()));
-                }
+                return Ok(Type::TypedObject(the_schema.id.unwrap()));
             }
         }
     }
@@ -220,16 +216,12 @@ fn handle_object_type(schema: &SchemaContext) -> Result<Option<Type>, Box<dyn Er
         }
 
         // If the object has a title, it's a typed object
-    } else if let Some(id) = schema
-        .schema
-        .metadata
-        .as_ref()
-        .and_then(|metadata| metadata.id.as_ref())
-    {
+    } else if let Some(id) = &schema.id{
         Ok(Some(Type::TypedObject(id.clone())))
-    } else {
-        Ok(Some(Type::UntypedObject))
+    } else{
+        Ok(None)
     }
+
 }
 fn handle_type_from_instance_type(schema: &SchemaContext) -> Result<Option<Type>, Box<dyn Error>>{
     // Try to match based on an instance type if one exists
@@ -334,7 +326,6 @@ fn generate_rust_type(
             let ident = generate_struct_identifier(metadata);
             quote! { super::#module::#ident }
         }
-        Type::UntypedObject => quote! { Map<String, Value> },
         Type::MapOfObjects => quote! { Map<String, Value> },
     }
 }
@@ -447,7 +438,6 @@ fn generate_default_value_token(ty: &Type, default: &Value, field_name: &String)
         }
         Type::String => unimplemented!(),
         Type::TypedObject(_) => unimplemented!(),
-        Type::UntypedObject => unimplemented!(),
     }
 }
 
@@ -767,6 +757,7 @@ impl<'a> SchemaStore<'a> {
 
         SchemaContext{
             schema_store: self,
+            id: Some(name.to_string()),
             schema: &root_schema.schema,
         }
     }
@@ -978,15 +969,7 @@ fn main() {
     let mut closed_types = HashSet::new();
     let mut open_types = Vec::new();
     for path in specification_schema_store.roots.iter() {
-        let schema = specification_schema_store.schemas.get(path).unwrap();
-        if let Some(id) = schema
-            .schema
-            .metadata
-            .as_ref()
-            .and_then(|metadata| metadata.id.as_ref())
-        {
-            open_types.push(id.clone());
-        }
+        open_types.push(path.clone());
     }
 
     while !open_types.is_empty() {
