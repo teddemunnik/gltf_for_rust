@@ -17,6 +17,15 @@ use std::vec::Vec;
 use std::{fs, fs::File, io::BufWriter};
 use thiserror::Error;
 
+fn plural_to_singular(maybe_plural: &str) -> String{
+    if maybe_plural.ends_with("s"){
+        String::from(&maybe_plural[..maybe_plural.len()-1])
+    }
+    else{
+        String::from(maybe_plural)
+    }
+}
+
 #[derive(Debug, Error)]
 enum MyError {
     #[error("Failed to open schema {path}: {inner}")]
@@ -297,7 +306,7 @@ fn generate_rust_type(schema_store: &SchemaStore, ty: &Type, field_name: &String
         Type::TypedObject(uri) => generate_named_type_path(schema_store, uri),
         Type::MapOfObjects => quote! { Map<String, Value> },
         Type::EmbeddedObject(_) => {
-            let ident = Ident::new(&field_name.to_case(Case::UpperCamel), Span::call_site());
+            let ident = Ident::new(&plural_to_singular(field_name).to_case(Case::UpperCamel), Span::call_site());
             quote! { #ident }
         }
     }
@@ -517,7 +526,7 @@ fn write_embedded_enum(property_name: &str, enumeration: &Enum, default: &Option
 fn write_embedded_type(property_name: &str, ty: &Type, default: &Option<Value>, schema_store: &SchemaStore) -> Option<TokenStream>{
     match ty{
         Type::Array(array) => write_embedded_type(property_name, array.item.as_ref(), &None, schema_store),
-        Type::EmbeddedObject(object_type) => Some(generate_structure(property_name, object_type, schema_store)),
+        Type::EmbeddedObject(object_type) => Some(generate_structure(&plural_to_singular(property_name), object_type, schema_store)),
         Type::Enum(enumeration) => Some(write_embedded_enum(property_name, enumeration, default)),
         _ => None
     }
