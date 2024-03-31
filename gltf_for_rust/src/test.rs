@@ -8,7 +8,8 @@ use std::path::PathBuf;
 fn test() {
     // Open the file in read-only mode with buffer.
     let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    d.push("test_resources/palladin.gltf");
+    d.pop();
+    d.push("vendor/gltf_sample_assets/Models/Avocado/glTF/Avocado.gltf");
 
     println!("{}", d.display());
 
