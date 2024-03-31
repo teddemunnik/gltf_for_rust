@@ -203,55 +203,56 @@ fn try_match_int_enum(schema: &SchemaContext) -> Option<()> {
     Some(())
 }
 
-fn handle_type(schema: &SchemaContext) -> Result<Type, Box<dyn Error>> {
+fn handle_object_type(schema: &SchemaContext) -> Result<Option<Type>, Box<dyn Error>>{
+    // An object with no properties, but only additionalProperties, as a typed map
+    if let Some(_) = schema
+        .schema
+        .object
+        .as_ref()
+        .unwrap()
+        .additional_properties
+        .as_ref()
+    {
+        if schema.schema.object.as_ref().unwrap().properties.is_empty() {
+            Ok(Some(Type::MapOfObjects))
+        } else {
+            unreachable!();
+        }
+
+        // If the object has a title, it's a typed object
+    } else if let Some(id) = schema
+        .schema
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.id.as_ref())
+    {
+        Ok(Some(Type::TypedObject(id.clone())))
+    } else {
+        Ok(Some(Type::UntypedObject))
+    }
+}
+fn handle_type_from_instance_type(schema: &SchemaContext) -> Result<Option<Type>, Box<dyn Error>>{
     // Try to match based on an instance type if one exists
-    let ty = match &schema.schema.instance_type {
+    match &schema.schema.instance_type {
         Some(SingleOrVec::Single(a)) => match **a {
             InstanceType::Null => Err(Box::new(MyError::UnhandledInstanceType(
                 schema.schema.instance_type.clone(),
             )) as Box<dyn Error>),
             InstanceType::Boolean => Ok(Some(Type::Boolean)),
-            InstanceType::Object => {
-                // An object with no properties, but only additionalProperties, as a typed map
-                if let Some(_) = schema
-                    .schema
-                    .object
-                    .as_ref()
-                    .unwrap()
-                    .additional_properties
-                    .as_ref()
-                {
-                    if schema.schema.object.as_ref().unwrap().properties.is_empty() {
-                        Ok(Some(Type::MapOfObjects))
-                    } else {
-                        unreachable!();
-                    }
-
-                // If the object has a title, it's a typed object
-                } else if let Some(id) = schema
-                    .schema
-                    .metadata
-                    .as_ref()
-                    .and_then(|metadata| metadata.id.as_ref())
-                {
-                    Ok(Some(Type::TypedObject(id.clone())))
-                } else {
-                    Ok(Some(Type::UntypedObject))
-                }
-            }
+            InstanceType::Object => handle_object_type(schema),
             InstanceType::Array => Ok(Some(handle_array(schema)?)),
             InstanceType::Number => Ok(Some(Type::Number)),
             InstanceType::String => Ok(Some(Type::String)),
             InstanceType::Integer => Ok(Some(Type::Integer)),
         },
         _ => Ok(None),
-    }?;
+    }
+}
 
-    match ty {
-        Some(ty) => return Ok(ty),
-        _ => (),
-    };
-
+fn handle_type(schema: &SchemaContext) -> Result<Type, Box<dyn Error>> {
+    if let Some(ty) = handle_type_from_instance_type(schema)?{
+        return Ok(ty)
+    }
     // If there is an allOf with a single entry try to match based of this instead
     if let Some(Schema::Object(single_all_of)) = schema
         .schema
@@ -264,6 +265,7 @@ fn handle_type(schema: &SchemaContext) -> Result<Type, Box<dyn Error>> {
         return handle_type(&single_all_of);
     }
 
+    // Fallback to an any
     Ok(Type::Any)
 }
 
