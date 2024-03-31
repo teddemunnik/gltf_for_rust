@@ -1,7 +1,7 @@
 mod schema;
 
 use crate::schema::{SchemaType, SchemaUri};
-use convert_case::{Case, Casing};
+use convert_case::{Case, Casing, StateConverter};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use schema::{SchemaContext, SchemaStore};
@@ -466,6 +466,15 @@ fn get_raw_name(context: &SchemaContext) -> Option<String>{
         }
     }
 
+    // Get the schema name
+    if context.is_uri_root{
+        if let Some(path) = context.uri.as_ref().unwrap().path.as_ref(){
+            if let Some(no_suffix) =path.strip_suffix(".schema.json"){
+                return Some(no_suffix.replace("glTF", "gltf").replace(".", " ").to_case(Case::Title))
+            }
+        }
+    }
+
     // Or use the title
     let title = context.schema.metadata.as_ref().and_then(|metadata| metadata.title.as_ref());
     if let Some(title) = title{
@@ -810,7 +819,7 @@ fn load_extensions(
             let base_object_module_ident = Ident::new(
                 &base_object_name
                     .replace('.', " ")
-                    .to_lowercase()
+                    .replace("glTF", "gltf")
                     .to_case(Case::Snake),
                 Span::call_site(),
             );
