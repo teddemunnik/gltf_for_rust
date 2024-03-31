@@ -314,7 +314,7 @@ struct Property {
     comment: Option<String>,
 }
 
-fn recursive_read_properties(properties: &mut HashMap<String, Property>, schema: &SchemaContext) {
+fn recursive_read_properties(properties: &mut HashMap<String, Property>, schema: &SchemaContext, open_types: &mut Vec<SchemaUri>, closed_types: &HashSet<SchemaUri>) {
     // First read properties from 'base' schemas
     let base_schema = schema
         .schema
@@ -324,7 +324,7 @@ fn recursive_read_properties(properties: &mut HashMap<String, Property>, schema:
         .and_then(|all_of| all_of.first());
     if let Some(Schema::Object(base)) = base_schema {
         let base = schema.resolve(base);
-        recursive_read_properties(properties, &base);
+        recursive_read_properties(properties, &base, open_types, closed_types);
     }
 
     // Then add our own properties
@@ -335,6 +335,7 @@ fn recursive_read_properties(properties: &mut HashMap<String, Property>, schema:
             _ => unreachable!(),
         };
         let field_schema = schema.resolve(field_schema);
+
 
         let property = properties.entry(name.clone()).or_insert(Property {
             ty: Type::Any,
@@ -347,6 +348,8 @@ fn recursive_read_properties(properties: &mut HashMap<String, Property>, schema:
             Type::Any => property.ty = handle_field(&field_schema).unwrap(),
             _ => (),
         }
+
+        schedule_types(open_types, closed_types,&property.ty);
 
         if property.comment.is_none() {
             property.comment = field_schema
@@ -439,21 +442,15 @@ fn generate_property_identifier(name: &str) -> Ident {
 }
 
 /// Writes a rust type into a unique module with helper functions and type surrounding it
-struct RustTypeWriter<'a> {
-    open_types: &'a mut Vec<SchemaUri>,
-    closed_types: &'a HashSet<SchemaUri>,
+struct RustTypeWriter{
     embedded_enums: Vec<TokenStream>,
     default_declarations: Vec<TokenStream>,
 }
 
-impl<'a> RustTypeWriter<'a> {
-    fn new<'b>(open_types: &'b mut Vec<SchemaUri>, closed_types: &'b HashSet<SchemaUri>) -> Self
-    where
-        'b: 'a,
+impl RustTypeWriter {
+    fn new() -> Self
     {
         Self {
-            open_types,
-            closed_types,
             embedded_enums: Vec::new(),
             default_declarations: Vec::new(),
         }
@@ -466,9 +463,6 @@ fn write_property(
     name: &String,
     property: &Property,
 ) -> TokenStream {
-    // Ensure that the type referenced by our property will also be written out
-    schedule_types(writer.open_types, writer.closed_types, &property.ty);
-
     let rust_type = match (&property.ty, property.optional) {
         // Remove the Option for optional Vec's with a minimum length of 1
         // This way we can guarantee this invariant by telling serde to not serialize zero length vecs.
@@ -575,7 +569,7 @@ fn read_typed_object(schema: &SchemaContext, open_list: &mut Vec<SchemaUri>, clo
     let name =get_raw_name(schema.schema_store, schema.uri.as_ref().unwrap());
     let comment = schema.schema.metadata.as_ref().unwrap().description.clone();
     let mut properties = HashMap::new();
-    recursive_read_properties(&mut properties, &schema);
+    recursive_read_properties(&mut properties, &schema, open_list, closed_list);
     ObjectType{
         name,
         comment,
@@ -585,16 +579,14 @@ fn read_typed_object(schema: &SchemaContext, open_list: &mut Vec<SchemaUri>, clo
 
 fn generate_structure(
     object_type: &ObjectType,
-    schema_store: &SchemaStore,
-    open_types: &mut Vec<SchemaUri>,
-    closed_types: &HashSet<SchemaUri>
+    schema_store: &SchemaStore
 ) -> TokenStream {
 
     let mod_identifier = Ident::new(&object_type.name.to_case(Case::Snake), Span::call_site());
     let type_identifier = Ident::new(&object_type.name.to_case(Case::UpperCamel), Span::call_site());
 
     let mut property_tokens = Vec::new();
-    let mut type_writer = RustTypeWriter::new(open_types, closed_types);
+    let mut type_writer = RustTypeWriter::new();
     for (name, property) in object_type.properties.iter() {
         property_tokens.push(write_property(
             schema_store,
@@ -634,7 +626,7 @@ fn generate_rust(
         closed_types: &HashSet<SchemaUri>,
     ) -> TokenStream {
     let object_type= read_typed_object(schema, open_types, closed_types);
-    generate_structure(&object_type, schema.schema_store, open_types, closed_types)
+    generate_structure(&object_type, schema.schema_store)
 }
 
 
@@ -708,7 +700,7 @@ fn load_extensions(
             let mut object_type = read_typed_object(&schema, &mut open_types, &closed_types);
             object_type.name = String::from("extension");
 
-            let structure = generate_structure(&object_type, schema.schema_store, &mut open_types, &closed_types);
+            let structure = generate_structure(&object_type, schema.schema_store);
             extension_module.push(quote!{
                pub mod #base_object_module_ident{
                     #structure
