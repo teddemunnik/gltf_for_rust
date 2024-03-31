@@ -36,11 +36,7 @@ impl SchemaUri {
     pub fn definition_name(&self) -> Option<&str> {
         const DEFINITION_NS: &str = "/definitions/";
         self.fragment.as_ref().and_then(|fragment| {
-            if fragment.starts_with(DEFINITION_NS) {
-                Some(&fragment[DEFINITION_NS.len()..])
-            } else {
-                None
-            }
+            fragment.strip_prefix(DEFINITION_NS)
         })
     }
 }
@@ -189,14 +185,13 @@ impl<'a> SchemaStore<'a> {
     pub fn lookup(&self, uri: &SchemaUri) -> Option<(&SchemaStore, &SchemaObject)> {
         // Try in base first
         if let Some(base) = self.base {
-            match base.lookup(uri) {
-                Some(object) => return Some(object),
-                _ => (),
+            if let Some(object) = base.lookup(uri) {
+                return Some(object);
             }
         }
 
         if let Some(root) = self.schemas.get(uri.path.as_ref().unwrap()) {
-            if let Some(fragment) = uri.fragment.as_ref() {
+            if uri.fragment.is_some(){
                 lookup_fragment(root, uri).map(|fragment| (self, fragment))
             } else {
                 Some((self, &root.schema))

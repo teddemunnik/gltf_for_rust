@@ -18,8 +18,8 @@ use std::{fs, fs::File, io::BufWriter};
 use thiserror::Error;
 
 fn plural_to_singular(maybe_plural: &str) -> String {
-    if maybe_plural.ends_with("s") {
-        String::from(&maybe_plural[..maybe_plural.len() - 1])
+    if let Some(singular) =maybe_plural.strip_suffix('s'){
+        String::from(singular)
     } else {
         String::from(maybe_plural)
     }
@@ -119,10 +119,7 @@ fn try_match_string_enum(schema: &SchemaContext) -> Option<Enum> {
         };
 
         let is_string = match option.instance_type.as_ref() {
-            Some(SingleOrVec::Single(single)) => match single.as_ref() {
-                InstanceType::String => true,
-                _ => false,
-            },
+            Some(SingleOrVec::Single(single)) => matches!(single.as_ref(), InstanceType::String),
             _ => false,
         };
 
@@ -161,10 +158,7 @@ fn try_match_int_enum(schema: &SchemaContext) -> Option<()> {
         };
 
         let is_number = match option.instance_type.as_ref() {
-            Some(SingleOrVec::Single(single)) => match single.as_ref() {
-                InstanceType::Integer => true,
-                _ => false,
-            },
+            Some(SingleOrVec::Single(single)) => matches!(single.as_ref(), InstanceType::Integer),
             _ => false,
         };
 
@@ -182,17 +176,10 @@ fn handle_object_type(
     closed_types: &HashSet<SchemaUri>,
 ) -> Result<Option<Type>, Box<dyn Error>> {
     // An object with no properties, but only additionalProperties, as a typed map
-    if let Some(_) = schema
-        .schema
-        .object
-        .as_ref()
-        .unwrap()
-        .additional_properties
-        .as_ref()
-    {
-        if schema.schema.object.as_ref().unwrap().properties.is_empty() {
-            return Ok(Some(Type::MapOfObjects));
-        }
+    let object_validation = schema.schema.object.as_ref().unwrap();
+
+    if object_validation.additional_properties.as_ref().is_some() && schema.schema.object.as_ref().unwrap().properties.is_empty() {
+        return Ok(Some(Type::MapOfObjects));
     }
 
     if schema.is_uri_root {
@@ -207,7 +194,7 @@ fn handle_object_type(
         .as_ref()
         .and_then(|metadata| metadata.description.clone());
     let mut properties = HashMap::new();
-    recursive_read_properties(&mut properties, &schema, open_types, closed_types);
+    recursive_read_properties(&mut properties, schema, open_types, closed_types);
     Ok(Some(Type::EmbeddedObject(ObjectPrototype {
         properties,
         comment,
@@ -311,7 +298,7 @@ fn generate_rust_type(schema_store: &SchemaStore, ty: &Type, field_name: &String
         Type::Any => quote! { serde_json::Value },
         Type::Array(array_type) => {
             let item_rust_type = generate_rust_type(schema_store, &array_type.item, field_name);
-            return quote! { Vec::< #item_rust_type > };
+            quote! { Vec::< #item_rust_type > }
         }
         Type::FixedArray(array_type) => {
             let fixed_length = array_type.length as usize;
@@ -393,11 +380,8 @@ fn recursive_read_properties(
             default: None,
         });
 
-        match property.ty {
-            Type::Any => {
-                property.ty = handle_field(&field_schema, open_types, closed_types).unwrap()
-            }
-            _ => (),
+        if let Type::Any = property.ty {
+            property.ty = handle_field(&field_schema, open_types, closed_types).unwrap()
         }
 
         schedule_types(open_types, closed_types, &property.ty);
@@ -487,21 +471,12 @@ fn get_raw_name(store: &SchemaStore, uri: &SchemaUri) -> String {
     title
 }
 
-fn generate_module_identifier(store: &SchemaStore, uri: &SchemaUri) -> Ident {
-    let title = get_raw_name(store, uri);
-    Ident::new(&title.to_case(Case::Snake), Span::call_site())
-}
-fn generate_struct_identifier(store: &SchemaStore, uri: &SchemaUri) -> Ident {
-    let title = get_raw_name(store, uri);
-    Ident::new(&title.to_case(Case::UpperCamel), Span::call_site())
-}
-
 fn generate_property_identifier(name: &str) -> Ident {
     Ident::new(
         &name
             .to_case(Case::Snake)
             .replace("type", "ty")
-            .replace("@", ""),
+            .replace('@', ""),
         Span::call_site(),
     )
 }
@@ -529,7 +504,7 @@ fn write_embedded_enum(
     let rusty_enum_name = Ident::new(&property_name.to_case(Case::UpperCamel), Span::call_site());
     let enum_options = enumeration.options.iter().map(|option| {
         let identifier = Ident::new(
-            &option.to_case(Case::UpperCamel).replace(&['/'], ""),
+            &option.to_case(Case::UpperCamel).replace('/', ""),
             Span::call_site(),
         );
 
@@ -550,7 +525,7 @@ fn write_embedded_enum(
     quote! {
         #[derive(Serialize, Deserialize, Debug)]
         #default_declaration
-        enum #rusty_enum_name{
+        pub enum #rusty_enum_name{
             #(#enum_options),*
         }
     }
@@ -640,7 +615,7 @@ fn write_property(
     // rename to make it match the spec.
     let property_ident = generate_property_identifier(name);
     let rename_declaration =
-        if property_ident.to_string().partial_cmp(&name) != Some(Ordering::Equal) {
+        if property_ident.to_string().partial_cmp(name) != Some(Ordering::Equal) {
             Some(quote![#[serde(rename = #name)]])
         } else {
             None
@@ -667,7 +642,7 @@ fn read_typed_object(
         .as_ref()
         .and_then(|metadata| metadata.description.clone());
     let mut properties = HashMap::new();
-    recursive_read_properties(&mut properties, &schema, open_list, closed_list);
+    recursive_read_properties(&mut properties, schema, open_list, closed_list);
     ObjectType {
         name,
         prototype: ObjectPrototype {
@@ -811,7 +786,7 @@ fn load_extensions(
 
             let base_object_module_ident = Ident::new(
                 &base_object_name
-                    .replace(".", " ")
+                    .replace('.', " ")
                     .to_lowercase()
                     .to_case(Case::Snake),
                 Span::call_site(),
@@ -848,8 +823,7 @@ fn load_extensions(
             });
         }
 
-        while !open_types.is_empty() {
-            let uri = open_types.pop().unwrap();
+        while let Some(uri) = open_types.pop(){
             closed_types.insert(uri.clone());
             if !extension_schema_store.is_local_uri(&uri) {
                 continue;
@@ -863,7 +837,7 @@ fn load_extensions(
         let mut writer = BufWriter::new(output);
 
         let rust_file: syn::File = syn::parse2(quote! {
-            #![allow(clippy::all)]
+            #![allow(clippy::all, unused_imports)]
 
             #(#extension_module)*
         })
@@ -883,16 +857,14 @@ fn ensure_empty_dir(path: &str) {
     match read_dir(path) {
         Ok(dir) => {
             // Directory was found, remove any entries if they exist
-            for entry in dir {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
+            for entry in dir.flatten() {
+                let path = entry.path();
 
-                    if path.is_dir() {
-                        fs::remove_dir_all(path).expect("Failed to remove a dir");
-                    } else {
-                        fs::remove_file(path).expect("Failed to remove a file");
-                    }
-                };
+                if path.is_dir() {
+                    fs::remove_dir_all(path).expect("Failed to remove a dir");
+                } else {
+                    fs::remove_file(path).expect("Failed to remove a file");
+                }
             }
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -964,15 +936,14 @@ fn main() {
     let mut types =Vec::new();
     open_types.push(SchemaUri::from("glTF.schema.json"));
 
-    while !open_types.is_empty() {
-        let id = open_types.pop().unwrap();
-        closed_types.insert(id.clone());
-        let schema = specification_schema_store.make_context(&id);
+    while let Some(uri) = open_types.pop(){
+        closed_types.insert(uri.clone());
+        let schema = specification_schema_store.make_context(&uri);
         types.push(generate_rust(&schema, &mut open_types, &closed_types));
     }
 
     let rust = quote!{
-        #![allow(clippy::all)]
+        #![allow(clippy::all, unused_imports)]
 
         #(#types)*
     };
@@ -980,7 +951,7 @@ fn main() {
     let file : syn::File = syn::parse2(rust).unwrap();
     let output = File::create(format!("{generated_path}\\gltf.rs")).unwrap();
     let mut writer = BufWriter::new(output);
-    write!(writer, "{}", prettyplease::unparse(&file));
+    write!(writer, "{}", prettyplease::unparse(&file)).unwrap();
 
     write_root_module(generated_path, &generated_manifest);
 }
