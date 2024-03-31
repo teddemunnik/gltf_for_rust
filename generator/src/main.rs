@@ -8,21 +8,24 @@ use schemars::{
     visit::{visit_schema_object, Visitor},
 };
 use serde_json::Value;
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
+use std::fs::read_dir;
 use std::io::BufReader;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
 use std::{fs, fs::File, io::BufWriter};
-use std::cmp::Ordering;
-use std::fs::{read_dir};
 use thiserror::Error;
-use std::io::Write;
 
 #[derive(Debug, Error)]
 enum MyError {
     #[error("Failed to open schema {path}: {inner}")]
-    FailedToOpenSchema{path: PathBuf, inner: Box<dyn std::error::Error>},
+    FailedToOpenSchema {
+        path: PathBuf,
+        inner: Box<dyn std::error::Error>,
+    },
     #[error("Unhandled instance type")]
     UnhandledInstanceType(Option<SingleOrVec<InstanceType>>),
     #[error("Unhandled array item type")]
@@ -71,7 +74,10 @@ impl<'a> SchemaContext<'a> {
         if schema.is_ref() {
             return SchemaContext {
                 schema_store: self.schema_store,
-                schema: self.schema_store.lookup(schema.reference.as_ref().unwrap()).unwrap(),
+                schema: self
+                    .schema_store
+                    .lookup(schema.reference.as_ref().unwrap())
+                    .unwrap(),
             };
         }
 
@@ -315,12 +321,13 @@ fn generate_rust_type(
             quote! { #ident }
         }
         Type::TypedObject(id) => {
-            let metadata= schema_lookup
+            let metadata = schema_lookup
                 .get(id)
                 .unwrap()
                 .schema
                 .metadata
-                .as_ref().unwrap();
+                .as_ref()
+                .unwrap();
 
             let module = generate_module_identifier(metadata);
             let ident = generate_struct_identifier(metadata);
@@ -443,21 +450,24 @@ fn generate_default_value_token(ty: &Type, default: &Value, field_name: &String)
     }
 }
 
-fn generate_module_identifier(metadata: &Box<Metadata>) -> Ident{
+fn generate_module_identifier(metadata: &Box<Metadata>) -> Ident {
     let title = metadata.as_ref().title.as_ref().unwrap().to_lowercase();
     Ident::new(&title.to_case(Case::Snake), Span::call_site())
 }
-fn generate_struct_identifier(metadata: &Box<Metadata>) -> Ident{
+fn generate_struct_identifier(metadata: &Box<Metadata>) -> Ident {
     let title = metadata.as_ref().title.as_ref().unwrap().to_lowercase();
     Ident::new(&title.to_case(Case::UpperCamel), Span::call_site())
 }
 
-fn generate_property_identifier(name: &str) -> Ident{
-    Ident::new(&name.to_case(Case::Snake).replace("type", "ty"), Span::call_site())
+fn generate_property_identifier(name: &str) -> Ident {
+    Ident::new(
+        &name.to_case(Case::Snake).replace("type", "ty"),
+        Span::call_site(),
+    )
 }
 
 /// Writes a rust type into a unique module with helper functions and type surrounding it
-struct RustTypeWriter<'a>{
+struct RustTypeWriter<'a> {
     open_types: &'a mut Vec<String>,
     closed_types: &'a HashSet<String>,
     embedded_enums: Vec<TokenStream>,
@@ -465,19 +475,27 @@ struct RustTypeWriter<'a>{
     type_declaration: Option<TokenStream>,
 }
 
-impl<'a> RustTypeWriter<'a>{
-    fn new<'b>(open_types: &'b mut Vec<String>, closed_types: &'b HashSet<String>) -> Self where 'b : 'a{
-        Self{
+impl<'a> RustTypeWriter<'a> {
+    fn new<'b>(open_types: &'b mut Vec<String>, closed_types: &'b HashSet<String>) -> Self
+    where
+        'b: 'a,
+    {
+        Self {
             open_types,
             closed_types,
             embedded_enums: Vec::new(),
             default_declarations: Vec::new(),
-            type_declaration: None
+            type_declaration: None,
         }
     }
 }
 
-fn write_property(writer: &mut RustTypeWriter, name: &String, property: &Property, schema_lookup: &HashMap<String, SchemaContext>) ->TokenStream{
+fn write_property(
+    writer: &mut RustTypeWriter,
+    name: &String,
+    property: &Property,
+    schema_lookup: &HashMap<String, SchemaContext>,
+) -> TokenStream {
     // Ensure that the type referenced by our property will also be written out
     schedule_types(writer.open_types, writer.closed_types, &property.ty);
 
@@ -485,10 +503,10 @@ fn write_property(writer: &mut RustTypeWriter, name: &String, property: &Propert
         // Remove the Option for optional Vec's with a minimum length of 1
         // This way we can guarantee this invariant by telling serde to not serialize zero length vecs.
         (Type::Array(array_type), true)
-        if array_type.min_length.is_some() && array_type.min_length.unwrap() == 1 =>
-            {
-                generate_rust_type(schema_lookup, &property.ty, name)
-            }
+            if array_type.min_length.is_some() && array_type.min_length.unwrap() == 1 =>
+        {
+            generate_rust_type(schema_lookup, &property.ty, name)
+        }
 
         // Remove the Option for optional properties which have a default value specified.
         (_, true) if property.default.is_none() => {
@@ -514,10 +532,10 @@ fn write_property(writer: &mut RustTypeWriter, name: &String, property: &Propert
 
             let default_declaration = is_default.then(|| quote! { #[default] });
             quote! {
-                    #[serde(rename=#option)]
-                    #default_declaration
-                    #identifier
-                }
+                #[serde(rename=#option)]
+                #default_declaration
+                #identifier
+            }
         });
 
         let default_declaration = property
@@ -525,12 +543,12 @@ fn write_property(writer: &mut RustTypeWriter, name: &String, property: &Propert
             .as_ref()
             .map(|_| quote! { #[derive(Default)] });
         writer.embedded_enums.push(quote! {
-                #[derive(Serialize, Deserialize, Debug)]
-                #default_declaration
-                enum #rusty_enum_name{
-                    #(#enum_options),*
-                }
-            });
+            #[derive(Serialize, Deserialize, Debug)]
+            #default_declaration
+            enum #rusty_enum_name{
+                #(#enum_options),*
+            }
+        });
     }
 
     // For objects with an explicit default, create a default declaration
@@ -547,10 +565,10 @@ fn write_property(writer: &mut RustTypeWriter, name: &String, property: &Propert
 
     if let Some(default_declaration) = &default_declaration {
         writer.default_declarations.push(quote! {
-                fn #default_declaration() -> #rust_type{
-                    #explicit_default_value
-                }
-            });
+            fn #default_declaration() -> #rust_type{
+                #explicit_default_value
+            }
+        });
     }
 
     let default_declaration = default_declaration
@@ -567,28 +585,42 @@ fn write_property(writer: &mut RustTypeWriter, name: &String, property: &Propert
     // If the property identifier is different from the one in the spec we need to add a serde
     // rename to make it match the spec.
     let property_ident = generate_property_identifier(name);
-    let rename_declaration = if property_ident.to_string().partial_cmp(&name) != Some(Ordering::Equal){
-        Some(quote![#[serde(rename = #name)]])
-    }else{
-        None
-    };
+    let rename_declaration =
+        if property_ident.to_string().partial_cmp(&name) != Some(Ordering::Equal) {
+            Some(quote![#[serde(rename = #name)]])
+        } else {
+            None
+        };
 
     let docstring = property.comment.as_ref().map(|x| quote! { #[doc=#x] });
     quote! {
-            #rename_declaration
-            #default_declaration
-            #docstring
-            #property_ident: #rust_type
-        }
+        #rename_declaration
+        #default_declaration
+        #docstring
+        #property_ident: #rust_type
+    }
 }
 
-fn generate_structure(mod_identifier: &Ident, open_types: &mut Vec<String>, closed_types: &HashSet<String>, schema_lookup: &HashMap<String, SchemaContext>, name: &Ident, comment: Option<&String>, schema: &SchemaContext) -> TokenStream{
+fn generate_structure(
+    mod_identifier: &Ident,
+    open_types: &mut Vec<String>,
+    closed_types: &HashSet<String>,
+    schema_lookup: &HashMap<String, SchemaContext>,
+    name: &Ident,
+    comment: Option<&String>,
+    schema: &SchemaContext,
+) -> TokenStream {
     let mut properties = HashMap::new();
     recursive_read_properties(&mut properties, &schema);
     let mut property_tokens = Vec::new();
     let mut type_writer = RustTypeWriter::new(open_types, closed_types);
     for (name, property) in properties.iter() {
-        property_tokens.push(write_property(&mut type_writer, name, property, schema_lookup));
+        property_tokens.push(write_property(
+            &mut type_writer,
+            name,
+            property,
+            schema_lookup,
+        ));
     }
     let doc = match comment {
         Some(comment) => Some(quote! { #[doc=#comment]}),
@@ -617,7 +649,6 @@ fn generate_structure(mod_identifier: &Ident, open_types: &mut Vec<String>, clos
     }
 }
 
-
 fn write_rust(
     schema_lookup: &HashMap<String, SchemaContext>,
     schema: &SchemaContext,
@@ -631,8 +662,16 @@ fn write_rust(
     let comment = metadata.description.as_ref();
     let name = generate_struct_identifier(metadata);
 
-    let tokens = generate_structure(&mod_identifier, open_types, closed_types, schema_lookup, &name, comment, schema);
-    let file : syn::File = syn::parse2(tokens).unwrap();
+    let tokens = generate_structure(
+        &mod_identifier,
+        open_types,
+        closed_types,
+        schema_lookup,
+        &name,
+        comment,
+        schema,
+    );
+    let file: syn::File = syn::parse2(tokens).unwrap();
     write!(writer, "{}", prettyplease::unparse(&file)).unwrap();
 }
 
@@ -654,8 +693,11 @@ impl<'a, 'b> Visitor for ReferencedSchemaVisitor<'a, 'b> {
         }
 
         // Try to load it from the base store first
-        if let Some(base_store) = self.store.base{
-            if base_store.schemas.contains_key(schema.reference.as_ref().unwrap()){
+        if let Some(base_store) = self.store.base {
+            if base_store
+                .schemas
+                .contains_key(schema.reference.as_ref().unwrap())
+            {
                 return;
             }
         }
@@ -669,46 +711,49 @@ struct SchemaStore<'a> {
     folder: PathBuf,
     schemas: HashMap<String, RootSchema>,
     roots: Vec<String>,
-    base: Option<&'a SchemaStore<'a>>
+    base: Option<&'a SchemaStore<'a>>,
 }
 
 impl<'a> SchemaStore<'a> {
-    fn new_root(folder: &Path) ->Self{
-        Self{
+    fn new_root(folder: &Path) -> Self {
+        Self {
             folder: PathBuf::from(folder),
             base: None,
             roots: Vec::new(),
-            schemas: HashMap::new()
+            schemas: HashMap::new(),
         }
     }
 
-    fn new_extension(base: &'a SchemaStore<'a>, folder: &Path) -> Self{
+    fn new_extension(base: &'a SchemaStore<'a>, folder: &Path) -> Self {
         Self {
             folder: PathBuf::from(folder),
             base: Some(base),
             roots: Vec::new(),
-            schemas: HashMap::new()
+            schemas: HashMap::new(),
         }
     }
 
-    fn read_root(&mut self, id: &str) -> Result<(), Box<dyn Error>>
-    {
+    fn read_root(&mut self, id: &str) -> Result<(), Box<dyn Error>> {
         let result = self.read(id);
         self.roots.push(id.into());
         result
     }
 
-    fn read(&mut self, id: &str) -> Result<(), Box<dyn Error>>
-    {
+    fn read(&mut self, id: &str) -> Result<(), Box<dyn Error>> {
         let mut full_path = self.folder.clone();
         full_path.push(id);
 
         // Read the requested schema
-        let file = File::open(&full_path)
-            .map_err(|e| MyError::FailedToOpenSchema{path: full_path.clone(), inner: Box::new(e)})?;
+        let file = File::open(&full_path).map_err(|e| MyError::FailedToOpenSchema {
+            path: full_path.clone(),
+            inner: Box::new(e),
+        })?;
         let reader = BufReader::new(file);
-        let mut root_schema = serde_json::from_reader(reader)
-            .map_err(|e| MyError::FailedToOpenSchema{path: full_path.clone(),inner: Box::new(e)})?;
+        let mut root_schema =
+            serde_json::from_reader(reader).map_err(|e| MyError::FailedToOpenSchema {
+                path: full_path.clone(),
+                inner: Box::new(e),
+            })?;
 
         // Read any requested subschema
         let mut visitor = ReferencedSchemaVisitor {
@@ -720,12 +765,12 @@ impl<'a> SchemaStore<'a> {
         Ok(())
     }
 
-    fn lookup(&self, name: &str) -> Option<&SchemaObject>{
+    fn lookup(&self, name: &str) -> Option<&SchemaObject> {
         // Try in base first
-        if let Some(base) = self.base{
-            match base.lookup(name){
+        if let Some(base) = self.base {
+            match base.lookup(name) {
                 Some(object) => return Some(object),
-                _ => ()
+                _ => (),
             }
         }
 
@@ -734,11 +779,27 @@ impl<'a> SchemaStore<'a> {
     }
 }
 
-fn load_extensions(generated_manifest: &mut GeneratedManifest, extensions_path: &str, generated_path: &str, specification_schema: &SchemaStore) -> Result<(), String>{
-    for entry in read_dir(extensions_path).expect("Failed to open extensions directory").filter_map(Result::ok).filter(|entry| entry.file_type().map_or(false, |file_type| file_type.is_dir())){
+fn load_extensions(
+    generated_manifest: &mut GeneratedManifest,
+    extensions_path: &str,
+    generated_path: &str,
+    specification_schema: &SchemaStore,
+) -> Result<(), String> {
+    for entry in read_dir(extensions_path)
+        .expect("Failed to open extensions directory")
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_type()
+                .map_or(false, |file_type| file_type.is_dir())
+        })
+    {
         // Figure out the extension name and vendor prefix
         let extension_name = entry.file_name().to_string_lossy().to_string();
-        let vendor_prefix = extension_name.split('_').next().expect("Extension does not start with vendor prefix followed by an underscore");
+        let vendor_prefix = extension_name
+            .split('_')
+            .next()
+            .expect("Extension does not start with vendor prefix followed by an underscore");
 
         let extension_module_name = extension_name.to_case(Case::Snake);
 
@@ -748,23 +809,25 @@ fn load_extensions(generated_manifest: &mut GeneratedManifest, extensions_path: 
         schemas_path.push("schema");
         let extension_schema_suffix = format!("{}.schema.json", &extension_name);
 
-        let mut extension_schema_store = SchemaStore::new_extension(specification_schema, &schemas_path);
+        let mut extension_schema_store =
+            SchemaStore::new_extension(specification_schema, &schemas_path);
 
-        let schemas_dir = match read_dir(schemas_path){
+        let schemas_dir = match read_dir(schemas_path) {
             Ok(schemas) => schemas,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 println!("Extension {} does not provide any schemas", extension_name);
                 continue;
-            },
+            }
             Err(e) => return Err(String::from("Failed to open schemas directory")),
         };
 
         let mut extension_module = Vec::new();
 
-
-
-        for schema_entry in schemas_dir.filter_map(Result::ok).filter(|entry| entry.file_type().map_or(false, |file_type| file_type.is_file())){
-
+        for schema_entry in schemas_dir.filter_map(Result::ok).filter(|entry| {
+            entry
+                .file_type()
+                .map_or(false, |file_type| file_type.is_file())
+        }) {
             // If a schema ends with {Prefix}.ExtensionName.schema.json it represents the extension object with the extension name on that object
             let file_name = schema_entry.file_name().to_string_lossy().to_string();
             let suffix_start = match file_name.find(&extension_schema_suffix) {
@@ -774,17 +837,24 @@ fn load_extensions(generated_manifest: &mut GeneratedManifest, extensions_path: 
 
             let base_object_name = &file_name[0..suffix_start];
             // TODO: Empty base object name seems to mean it applies to all
-            if base_object_name.is_empty(){
+            if base_object_name.is_empty() {
                 continue;
             }
 
-            println!("Extension {} has an extension on {}", &extension_name, &base_object_name);
+            println!(
+                "Extension {} has an extension on {}",
+                &extension_name, &base_object_name
+            );
 
-            let base_object_module_ident = Ident::new(&base_object_name.replace(".", " ").to_case(Case::Snake), Span::call_site());
-            let extension_doc = Some(format!("The {extension_name} extension for {base_object_name}"));
+            let base_object_module_ident = Ident::new(
+                &base_object_name.replace(".", " ").to_case(Case::Snake),
+                Span::call_site(),
+            );
+            let extension_doc = Some(format!(
+                "The {extension_name} extension for {base_object_name}"
+            ));
 
             extension_schema_store.read_root(&file_name).unwrap();
-
 
             let lookup = build_schena_lookup(&extension_schema_store);
             let schema = lookup.get(&file_name).unwrap();
@@ -792,28 +862,37 @@ fn load_extensions(generated_manifest: &mut GeneratedManifest, extensions_path: 
             let mut open_types = Vec::new();
             let closed_types = HashSet::new();
 
-            extension_module.push(generate_structure(&base_object_module_ident, &mut open_types, &closed_types, &lookup, &Ident::new("Extension", Span::call_site()), extension_doc.as_ref(), schema));
+            extension_module.push(generate_structure(
+                &base_object_module_ident,
+                &mut open_types,
+                &closed_types,
+                &lookup,
+                &Ident::new("Extension", Span::call_site()),
+                extension_doc.as_ref(),
+                schema,
+            ));
         }
-
 
         let output = File::create(format!("{generated_path}\\{extension_module_name}.rs")).unwrap();
         let mut writer = BufWriter::new(output);
 
-        let rust_file:syn::File = syn::parse2(quote!{
+        let rust_file: syn::File = syn::parse2(quote! {
             #(#extension_module)*
-        }).unwrap();
+        })
+        .unwrap();
 
         write!(writer, "{}", prettyplease::unparse(&rust_file)).unwrap();
 
-
-        generated_manifest.extension_modules.push(extension_module_name);
+        generated_manifest
+            .extension_modules
+            .push(extension_module_name);
     }
 
     Ok(())
 }
 
-fn ensure_empty_dir(path: &str){
-    match read_dir(path){
+fn ensure_empty_dir(path: &str) {
+    match read_dir(path) {
         Ok(dir) => {
             // Directory was found, remove any entries if they exist
             for entry in dir {
@@ -827,25 +906,23 @@ fn ensure_empty_dir(path: &str){
                     }
                 };
             }
-        },
+        }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // Directory was not found, create it
             fs::create_dir(path).unwrap();
         }
         Err(e) => panic!("Unhandled error {e}"),
-
-
     }
 }
 
-struct GeneratedManifest{
+struct GeneratedManifest {
     extension_modules: Vec<String>,
 }
 
-impl GeneratedManifest{
-    fn new() -> Self{
-        Self{
-            extension_modules: Vec::new()
+impl GeneratedManifest {
+    fn new() -> Self {
+        Self {
+            extension_modules: Vec::new(),
         }
     }
 }
@@ -854,44 +931,58 @@ fn write_root_module(generated_path: &str, generated_manifest: &GeneratedManifes
     let output = File::create(format!("{generated_path}\\mod.rs")).unwrap();
     let mut writer = BufWriter::new(output);
 
-    let extension_modules: Vec<TokenStream> = generated_manifest.extension_modules.iter().map(|module_name| {
-        let ident = Ident::new(module_name, Span::call_site());
-        quote! { pub mod #ident; }
-    }).collect();
+    let extension_modules: Vec<TokenStream> = generated_manifest
+        .extension_modules
+        .iter()
+        .map(|module_name| {
+            let ident = Ident::new(module_name, Span::call_site());
+            quote! { pub mod #ident; }
+        })
+        .collect();
 
     let rust_file: syn::File = syn::parse2(quote! {
         pub mod gltf;
         #(#extension_modules)*
-    }).unwrap();
+    })
+    .unwrap();
 
     write!(writer, "{}", prettyplease::unparse(&rust_file)).unwrap();
 }
 
-fn create_specification_schema_store() -> SchemaStore<'static>{
-    let mut specification_schema = SchemaStore::new_root(&PathBuf::from("vendor\\gltf\\specification\\2.0\\schema"));
+fn create_specification_schema_store() -> SchemaStore<'static> {
+    let mut specification_schema =
+        SchemaStore::new_root(&PathBuf::from("vendor\\gltf\\specification\\2.0\\schema"));
     specification_schema.read_root("glTF.schema.json").unwrap();
     specification_schema
 }
 
-    fn add_schema_store_lookup<'a, 'b>(schema_store: &'a SchemaStore, lookup: &mut HashMap<String, SchemaContext<'b>>) where 'a : 'b{
-        // Base schemas
-        if let Some(base) = schema_store.base{
-            add_schema_store_lookup(base, lookup);
-        }
-
-        // My schemas
-        for (path, schema) in schema_store.schemas.iter() {
-            lookup.insert(
-                path.clone(),
-                SchemaContext {
-                    schema_store: &schema_store,
-                    schema: &schema.schema,
-                },
-            );
-        }
+fn add_schema_store_lookup<'a, 'b>(
+    schema_store: &'a SchemaStore,
+    lookup: &mut HashMap<String, SchemaContext<'b>>,
+) where
+    'a: 'b,
+{
+    // Base schemas
+    if let Some(base) = schema_store.base {
+        add_schema_store_lookup(base, lookup);
     }
 
-fn build_schena_lookup<'a, 'b >(schema_store: &'b SchemaStore) -> HashMap<String, SchemaContext<'a>> where 'b : 'a{
+    // My schemas
+    for (path, schema) in schema_store.schemas.iter() {
+        lookup.insert(
+            path.clone(),
+            SchemaContext {
+                schema_store: &schema_store,
+                schema: &schema.schema,
+            },
+        );
+    }
+}
+
+fn build_schena_lookup<'a, 'b>(schema_store: &'b SchemaStore) -> HashMap<String, SchemaContext<'a>>
+where
+    'b: 'a,
+{
     let mut schema_lookup = HashMap::new();
     add_schema_store_lookup(schema_store, &mut schema_lookup);
     schema_lookup
@@ -912,7 +1003,6 @@ fn main() {
     let mut writer = BufWriter::new(output);
 
     let schema_lookup = build_schena_lookup(&specification_schema_store);
-
 
     // Collect root types:
     let mut closed_types = HashSet::new();
