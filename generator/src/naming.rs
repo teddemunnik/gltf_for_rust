@@ -1,4 +1,5 @@
 //! Utilities for extracting consistent names out of the gltf specification
+
 use convert_case::{Case, Casing};
 use proc_macro2::{Ident, Span};
 use crate::schema::SchemaContext;
