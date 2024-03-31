@@ -1,5 +1,4 @@
 use crate::MyError;
-use convert_case::Casing;
 use schemars::schema::{RootSchema, Schema, SchemaObject};
 use std::collections::HashMap;
 use std::error::Error;
