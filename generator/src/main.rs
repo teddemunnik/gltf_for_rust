@@ -659,33 +659,18 @@ fn load_extensions(
         schemas_path.push("schema");
         let extension_schema_suffix = format!("{}.schema.json", &extension_name);
 
-        let mut extension_schema_store =
-            SchemaStore::new_extension(specification_schema, &schemas_path);
-
-        let schemas_dir = match read_dir(schemas_path) {
-            Ok(schemas) => schemas,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                println!("Extension {} does not provide any schemas", extension_name);
-                continue;
-            }
-            Err(_) => return Err(String::from("Failed to open schemas directory")),
-        };
+        let mut extension_schema_store = SchemaStore::load(&schemas_path, Some(specification_schema)).unwrap();
 
         let mut extension_module = Vec::new();
 
-        for schema_entry in schemas_dir.filter_map(Result::ok).filter(|entry| {
-            entry
-                .file_type()
-                .map_or(false, |file_type| file_type.is_file())
-        }) {
+        for (name, schema) in extension_schema_store.schemas.iter(){
             // If a schema ends with {Prefix}.ExtensionName.schema.json it represents the extension object with the extension name on that object
-            let file_name = schema_entry.file_name().to_string_lossy().to_string();
-            let suffix_start = match file_name.find(&extension_schema_suffix) {
-                Some(index) if index == file_name.len() - extension_schema_suffix.len() => index,
+            let suffix_start = match name.find(&extension_schema_suffix) {
+                Some(index) if index == name.len() - extension_schema_suffix.len() => index,
                 _ => continue,
             };
 
-            let base_object_name = &file_name[0..suffix_start];
+            let base_object_name = &name[0..suffix_start];
             // TODO: Empty base object name seems to mean it applies to all
             if base_object_name.is_empty() {
                 continue;
@@ -704,9 +689,7 @@ fn load_extensions(
                 "The {extension_name} extension for {base_object_name}"
             ));
 
-            extension_schema_store.read_root(&file_name).unwrap();
-
-            let schema = extension_schema_store.make_context(&file_name);
+            let schema = extension_schema_store.make_context(&name);
 
             let mut open_types = Vec::new();
             let closed_types = HashSet::new();
@@ -797,19 +780,13 @@ fn write_root_module(generated_path: &str, generated_manifest: &GeneratedManifes
     write!(writer, "{}", prettyplease::unparse(&rust_file)).unwrap();
 }
 
-fn create_specification_schema_store() -> SchemaStore<'static> {
-    let mut specification_schema =
-        SchemaStore::new_root(&PathBuf::from("vendor\\gltf\\specification\\2.0\\schema"));
-    specification_schema.read_root("glTF.schema.json").unwrap();
-    specification_schema
-}
 fn main() {
     // Recreate the generated directory
     let generated_path = "gltf_for_rust\\src\\generated";
     ensure_empty_dir(generated_path);
 
     // Create the core specification schema store
-    let specification_schema_store = create_specification_schema_store();
+    let specification_schema_store = SchemaStore::load(&PathBuf::from("vendor\\gltf\\specification\\2.0\\schema"), None).unwrap();
 
     let generated_manifest = GeneratedManifest::new();
     //load_extensions(&mut generated_manifest, "vendor\\gltf\\extensions\\2.0\\Khronos", generated_path, &specification_schema_store).unwrap();
@@ -820,9 +797,7 @@ fn main() {
     // Collect root types:
     let mut closed_types = HashSet::new();
     let mut open_types = Vec::new();
-    for path in specification_schema_store.roots.iter() {
-        open_types.push(path.clone());
-    }
+    open_types.push("glTF.schema.json".to_string());
 
     while !open_types.is_empty() {
         let id = open_types.pop().unwrap();

@@ -1,45 +1,10 @@
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::File;
+use std::fs::{File, read_dir};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use schemars::schema::{RootSchema, SchemaObject};
-use schemars::visit::{visit_root_schema, visit_schema_object, Visitor};
 use crate::{MyError};
-
-
-struct ReferencedSchemaVisitor<'a, 'b> {
-    store: &'b mut SchemaStore<'a>,
-    result: Result<(), Box<dyn Error>>,
-}
-
-impl<'a, 'b> Visitor for ReferencedSchemaVisitor<'a, 'b> {
-    fn visit_schema_object(&mut self, schema: &mut SchemaObject) {
-        // Don't load more references once one fails
-        if self.result.is_err() {
-            return;
-        }
-
-        if !schema.is_ref() {
-            visit_schema_object(self, schema);
-            return;
-        }
-
-        // Try to load it from the base store first
-        if let Some(base_store) = self.store.base {
-            if base_store
-                .schemas
-                .contains_key(schema.reference.as_ref().unwrap())
-            {
-                return;
-            }
-        }
-
-        // Resolve the schema by path
-        self.result = self.store.read(schema.reference.as_ref().unwrap());
-    }
-}
-
 
 #[derive(Clone)]
 pub struct SchemaContext<'a> {
@@ -75,19 +40,26 @@ impl<'a> SchemaContext<'a> {
 
 pub struct SchemaStore<'a> {
     folder: PathBuf,
-    schemas: HashMap<String, RootSchema>,
-    pub roots: Vec<String>,
+    pub schemas: HashMap<String, RootSchema>,
     base: Option<&'a SchemaStore<'a>>,
 }
 
 impl<'a> SchemaStore<'a> {
-    pub fn new_root(folder: &Path) -> Self {
-        Self {
-            folder: PathBuf::from(folder),
-            base: None,
-            roots: Vec::new(),
+    pub fn load(folder: &Path, base: Option<&'a SchemaStore>) -> Result<Self, Box<dyn Error>> {
+        let mut store = Self{
             schemas: HashMap::new(),
+            folder: PathBuf::from(folder),
+            base
+        };
+
+        for entry in read_dir(&folder).unwrap().into_iter().filter_map(Result::ok){
+            let file_name = entry.file_name().to_string_lossy().to_string();
+            if file_name.ends_with("schema.json"){
+                store.read(&file_name)?;
+            }
         }
+
+        Ok(store)
     }
 
     #[allow(unused)]
@@ -95,17 +67,9 @@ impl<'a> SchemaStore<'a> {
         Self {
             folder: PathBuf::from(folder),
             base: Some(base),
-            roots: Vec::new(),
             schemas: HashMap::new(),
         }
     }
-
-    pub fn read_root(&mut self, id: &str) -> Result<(), Box<dyn Error>> {
-        let result = self.read(id);
-        self.roots.push(id.into());
-        result
-    }
-
     pub fn read(&mut self, id: &str) -> Result<(), Box<dyn Error>> {
         let mut full_path = self.folder.clone();
         full_path.push(id);
@@ -116,18 +80,12 @@ impl<'a> SchemaStore<'a> {
             inner: Box::new(e),
         })?;
         let reader = BufReader::new(file);
-        let mut root_schema =
+        let root_schema =
             serde_json::from_reader(reader).map_err(|e| MyError::FailedToOpenSchema {
                 path: full_path.clone(),
                 inner: Box::new(e),
             })?;
 
-        // Read any requested subschema
-        let mut visitor = ReferencedSchemaVisitor {
-            store: self,
-            result: Result::Ok(()),
-        };
-        visit_root_schema(&mut visitor, &mut root_schema);
         self.schemas.insert(id.to_string(), root_schema);
         Ok(())
     }
