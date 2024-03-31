@@ -72,7 +72,7 @@ impl<'a> SchemaContext<'a> {
         if schema.is_ref() {
             return SchemaContext {
                 schema_store: self.schema_store,
-                schema: &self.schema_store.schemas.get(schema.reference.as_ref().unwrap()).unwrap().schema,
+                schema: self.schema_store.lookup(schema.reference.as_ref().unwrap()).unwrap(),
             };
         }
 
@@ -720,6 +720,19 @@ impl<'a> SchemaStore<'a> {
         self.schemas.insert(id.to_string(), root_schema);
         Ok(())
     }
+
+    fn lookup(&self, name: &str) -> Option<&SchemaObject>{
+        // Try in base first
+        if let Some(base) = self.base{
+            match base.lookup(name){
+                Some(object) => return Some(object),
+                _ => ()
+            }
+        }
+
+        // Try ourselves
+        self.schemas.get(name).map(|schema| &schema.schema)
+    }
 }
 
 fn load_extensions(generated_manifest: &mut GeneratedManifest, extensions_path: &str, generated_path: &str, specification_schema: &SchemaStore) -> Result<(), String>{
@@ -769,24 +782,18 @@ fn load_extensions(generated_manifest: &mut GeneratedManifest, extensions_path: 
             println!("Extension {} has an extension on {}", &extension_name, &base_object_name);
 
             let base_object_module_ident = Ident::new(&base_object_name.replace(".", " ").to_case(Case::Snake), Span::call_site());
-            let extension_doc = format!("The {extension_name} extension for {base_object_name}");
+            let extension_doc = Some(format!("The {extension_name} extension for {base_object_name}"));
 
             extension_schema_store.read_root(&file_name).unwrap();
 
 
-            let schema = extension_schema_store.schemas.get(&file_name).unwrap();
+            let lookup = build_schena_lookup(&extension_schema_store);
+            let schema = lookup.get(&file_name).unwrap();
 
+            let mut open_types = Vec::new();
+            let closed_types = HashSet::new();
 
-            extension_module.push(quote!{
-               pub mod #base_object_module_ident{
-
-                    #[doc=#extension_doc]
-                    pub struct Extension{
-
-
-                    }
-                }
-            });
+            extension_module.push(generate_structure(&base_object_module_ident, &mut open_types, &closed_types, &lookup, &Ident::new("Extension", Span::call_site()), extension_doc.as_ref(), schema));
         }
 
 
@@ -867,6 +874,30 @@ fn create_specification_schema_store() -> SchemaStore<'static>{
     specification_schema
 }
 
+    fn add_schema_store_lookup<'a, 'b>(schema_store: &'a SchemaStore, lookup: &mut HashMap<String, SchemaContext<'b>>) where 'a : 'b{
+        // Base schemas
+        if let Some(base) = schema_store.base{
+            add_schema_store_lookup(base, lookup);
+        }
+
+        // My schemas
+        for (path, schema) in schema_store.schemas.iter() {
+            lookup.insert(
+                path.clone(),
+                SchemaContext {
+                    schema_store: &schema_store,
+                    schema: &schema.schema,
+                },
+            );
+        }
+    }
+
+fn build_schena_lookup<'a, 'b >(schema_store: &'b SchemaStore) -> HashMap<String, SchemaContext<'a>> where 'b : 'a{
+    let mut schema_lookup = HashMap::new();
+    add_schema_store_lookup(schema_store, &mut schema_lookup);
+    schema_lookup
+}
+
 fn main() {
     // Recreate the generated directory
     let generated_path = "gltf_for_rust\\src\\generated";
@@ -881,24 +912,8 @@ fn main() {
     let output = File::create(format!("{generated_path}\\gltf.rs")).unwrap();
     let mut writer = BufWriter::new(output);
 
-    // Build a map to lookup named types in the schemas
-    let mut schema_lookup = HashMap::new();
-    for (path, schema) in specification_schema_store.schemas.iter() {
-        if let Some(id) = schema
-            .schema
-            .metadata
-            .as_ref()
-            .and_then(|metadata| metadata.id.as_ref())
-        {
-            schema_lookup.insert(
-                id.clone(),
-                SchemaContext {
-                    schema_store: &specification_schema_store,
-                    schema: &schema.schema,
-                },
-            );
-        }
-    }
+    let schema_lookup = build_schena_lookup(&specification_schema_store);
+
 
     // Collect root types:
     let mut closed_types = HashSet::new();
