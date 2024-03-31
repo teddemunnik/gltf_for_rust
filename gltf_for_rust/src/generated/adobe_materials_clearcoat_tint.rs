@@ -6,16 +6,16 @@ pub mod material {
         #[derive(Serialize, Deserialize, Debug)]
         ///glTF extension that defines the colour tint of the clearcoat.
         pub struct Extension {
+            #[serde(default)]
+            ///JSON object with extension-specific objects.
+            pub extensions: Option<Map<String, Value>>,
+            #[serde(default)]
+            ///Application-specific data.
+            pub extras: Option<serde_json::Value>,
             #[serde(rename = "clearcoatTintFactor")]
             #[serde(default = "get_default_clearcoat_tint_factor")]
             ///The transmittance of the clearcoat layer.
             pub clearcoat_tint_factor: [f64; 3usize],
-            #[serde(default)]
-            ///Application-specific data.
-            pub extras: Option<serde_json::Value>,
-            #[serde(default)]
-            ///JSON object with extension-specific objects.
-            pub extensions: Option<Map<String, Value>>,
             #[serde(rename = "clearcoatTintTexture")]
             #[serde(default)]
             ///The clearcoat layer tint texture.

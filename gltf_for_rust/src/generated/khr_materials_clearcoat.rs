@@ -6,24 +6,12 @@ pub mod material {
         #[derive(Serialize, Deserialize, Debug)]
         ///glTF extension that defines the clearcoat material layer.
         pub struct Extension {
-            #[serde(rename = "clearcoatRoughnessTexture")]
-            #[serde(default)]
-            ///The clearcoat layer roughness texture.
-            pub clearcoat_roughness_texture: Option<crate::generated::gltf::TextureInfo>,
-            #[serde(rename = "clearcoatRoughnessFactor")]
-            #[serde(default = "get_default_clearcoat_roughness_factor")]
-            ///The clearcoat layer roughness.
-            pub clearcoat_roughness_factor: f64,
-            #[serde(rename = "clearcoatTexture")]
-            #[serde(default)]
-            ///The clearcoat layer intensity texture.
-            pub clearcoat_texture: Option<crate::generated::gltf::TextureInfo>,
-            #[serde(default)]
-            ///Application-specific data.
-            pub extras: Option<serde_json::Value>,
             #[serde(default)]
             ///JSON object with extension-specific objects.
             pub extensions: Option<Map<String, Value>>,
+            #[serde(default)]
+            ///Application-specific data.
+            pub extras: Option<serde_json::Value>,
             #[serde(rename = "clearcoatFactor")]
             #[serde(default = "get_default_clearcoat_factor")]
             ///The clearcoat layer intensity.
@@ -34,16 +22,28 @@ pub mod material {
             pub clearcoat_normal_texture: Option<
                 crate::generated::gltf::MaterialNormalTextureInfo,
             >,
+            #[serde(rename = "clearcoatRoughnessFactor")]
+            #[serde(default = "get_default_clearcoat_roughness_factor")]
+            ///The clearcoat layer roughness.
+            pub clearcoat_roughness_factor: f64,
+            #[serde(rename = "clearcoatRoughnessTexture")]
+            #[serde(default)]
+            ///The clearcoat layer roughness texture.
+            pub clearcoat_roughness_texture: Option<crate::generated::gltf::TextureInfo>,
+            #[serde(rename = "clearcoatTexture")]
+            #[serde(default)]
+            ///The clearcoat layer intensity texture.
+            pub clearcoat_texture: Option<crate::generated::gltf::TextureInfo>,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {
                 &self.extensions
             }
         }
-        fn get_default_clearcoat_roughness_factor() -> f64 {
+        fn get_default_clearcoat_factor() -> f64 {
             0f64
         }
-        fn get_default_clearcoat_factor() -> f64 {
+        fn get_default_clearcoat_roughness_factor() -> f64 {
             0f64
         }
     }

@@ -7,14 +7,14 @@ pub mod texture {
         ///glTF extension to specify textures using the KTX v2 images with Basis Universal supercompression.
         pub struct Extension {
             #[serde(default)]
-            ///The index of the image which points to a KTX v2 resource with Basis Universal supercompression.
-            pub source: Option<i64>,
-            #[serde(default)]
             ///JSON object with extension-specific objects.
             pub extensions: Option<Map<String, Value>>,
             #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
+            #[serde(default)]
+            ///The index of the image which points to a KTX v2 resource with Basis Universal supercompression.
+            pub source: Option<i64>,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {

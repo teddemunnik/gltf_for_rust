@@ -31,39 +31,39 @@ pub mod buffer_view {
             #[serde(default)]
             ///JSON object with extension-specific objects.
             pub extensions: Option<Map<String, Value>>,
-            #[serde(default = "get_default_filter")]
-            ///The compression filter.
-            pub filter: Filter,
-            #[serde(rename = "byteLength")]
-            ///The length of the compressed data in bytes.
-            pub byte_length: i64,
-            #[serde(rename = "byteStride")]
-            ///The stride, in bytes.
-            pub byte_stride: i64,
             #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
             ///The index of the buffer with compressed data.
             pub buffer: i64,
-            ///The compression mode.
-            pub mode: Mode,
-            ///The number of elements.
-            pub count: i64,
+            #[serde(rename = "byteLength")]
+            ///The length of the compressed data in bytes.
+            pub byte_length: i64,
             #[serde(rename = "byteOffset")]
             #[serde(default = "get_default_byte_offset")]
             ///The offset into the buffer in bytes.
             pub byte_offset: i64,
+            #[serde(rename = "byteStride")]
+            ///The stride, in bytes.
+            pub byte_stride: i64,
+            ///The number of elements.
+            pub count: i64,
+            #[serde(default = "get_default_filter")]
+            ///The compression filter.
+            pub filter: Filter,
+            ///The compression mode.
+            pub mode: Mode,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {
                 &self.extensions
             }
         }
-        fn get_default_filter() -> Filter {
-            Filter::default()
-        }
         fn get_default_byte_offset() -> i64 {
             0i64
+        }
+        fn get_default_filter() -> Filter {
+            Filter::default()
         }
     }
     pub use extension::Extension;
@@ -81,11 +81,11 @@ pub mod buffer {
         ///Compressed data for bufferView.
         pub struct Extension {
             #[serde(default)]
-            ///Application-specific data.
-            pub extras: Option<serde_json::Value>,
-            #[serde(default)]
             ///JSON object with extension-specific objects.
             pub extensions: Option<Map<String, Value>>,
+            #[serde(default)]
+            ///Application-specific data.
+            pub extras: Option<serde_json::Value>,
             #[serde(default = "get_default_fallback")]
             ///Set to true to indicate that the buffer is only referenced by bufferViews that have EXT_meshopt_compression extension and as such doesn't need to be loaded.
             pub fallback: bool,

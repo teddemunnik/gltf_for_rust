@@ -6,13 +6,13 @@ pub mod gltf {
         #[derive(Serialize, Deserialize, Debug)]
         ///Metadata about the glTF asset.
         pub struct Extension {
-            pub packets: Vec<crate::generated::khr_xmp_json_ld::Packet>,
             #[serde(default)]
             ///JSON object with extension-specific objects.
             pub extensions: Option<Map<String, Value>>,
             #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
+            pub packets: Vec<crate::generated::khr_xmp_json_ld::Packet>,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {

@@ -7,11 +7,11 @@ pub mod material {
         ///glTF extension that defines the strength of dispersion.
         pub struct Extension {
             #[serde(default)]
-            ///Application-specific data.
-            pub extras: Option<serde_json::Value>,
-            #[serde(default)]
             ///JSON object with extension-specific objects.
             pub extensions: Option<Map<String, Value>>,
+            #[serde(default)]
+            ///Application-specific data.
+            pub extras: Option<serde_json::Value>,
             #[serde(default = "get_default_dispersion")]
             ///This parameter defines dispersion in terms of the 20/Abbe number formulation.
             pub dispersion: f64,

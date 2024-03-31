@@ -10,11 +10,11 @@ pub mod gltf {
             ///JSON object with extension-specific objects.
             pub extensions: Option<Map<String, Value>>,
             #[serde(default)]
-            ///The index of the images node which points to a DDS texture file.
-            pub source: Option<i64>,
-            #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
+            #[serde(default)]
+            ///The index of the images node which points to a DDS texture file.
+            pub source: Option<i64>,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {

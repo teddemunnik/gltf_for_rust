@@ -6,10 +6,6 @@ pub mod gltf {
         #[derive(Serialize, Deserialize, Debug)]
         ///glTF extension that defines the colour tint of the clearcoat.
         pub struct Extension {
-            #[serde(rename = "clearcoatSpecularFactor")]
-            #[serde(default = "get_default_clearcoat_specular_factor")]
-            ///The clearcoat layer's specular intensity.
-            pub clearcoat_specular_factor: f64,
             #[serde(default)]
             ///JSON object with extension-specific objects.
             pub extensions: Option<Map<String, Value>>,
@@ -20,6 +16,10 @@ pub mod gltf {
             #[serde(default = "get_default_clearcoat_ior")]
             ///The clearcoat layer's index of refraction.
             pub clearcoat_ior: f64,
+            #[serde(rename = "clearcoatSpecularFactor")]
+            #[serde(default = "get_default_clearcoat_specular_factor")]
+            ///The clearcoat layer's specular intensity.
+            pub clearcoat_specular_factor: f64,
             #[serde(rename = "clearcoatSpecularTexture")]
             #[serde(default)]
             ///The clearcoat layer specular intensity texture.
@@ -30,11 +30,11 @@ pub mod gltf {
                 &self.extensions
             }
         }
-        fn get_default_clearcoat_specular_factor() -> f64 {
-            1f64
-        }
         fn get_default_clearcoat_ior() -> f64 {
             1.5f64
+        }
+        fn get_default_clearcoat_specular_factor() -> f64 {
+            1f64
         }
     }
     pub use extension::Extension;

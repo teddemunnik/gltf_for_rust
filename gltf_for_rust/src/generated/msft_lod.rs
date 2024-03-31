@@ -10,11 +10,11 @@ pub mod gltf {
             ///JSON object with extension-specific objects.
             pub extensions: Option<Map<String, Value>>,
             #[serde(default)]
-            ///Array containing the indices of progressively lower LOD nodes.
-            pub ids: Vec<i64>,
-            #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
+            #[serde(default)]
+            ///Array containing the indices of progressively lower LOD nodes.
+            pub ids: Vec<i64>,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {

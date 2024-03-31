@@ -12,6 +12,9 @@ pub mod gltf {
             #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
+            #[serde(default = "get_default_ior")]
+            ///The index of refraction of the material.
+            pub ior: f64,
             #[serde(rename = "transmissionFactor")]
             #[serde(default = "get_default_transmission_factor")]
             ///The base percentage of light transmitted through the surface.
@@ -20,20 +23,17 @@ pub mod gltf {
             #[serde(default)]
             ///A greyscale texture that defines the transmission percentage of the surface. This will be multiplied by transmissionFactor.
             pub transmission_texture: Option<crate::generated::gltf::TextureInfo>,
-            #[serde(default = "get_default_ior")]
-            ///The index of refraction of the material.
-            pub ior: f64,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {
                 &self.extensions
             }
         }
-        fn get_default_transmission_factor() -> f64 {
-            1f64
-        }
         fn get_default_ior() -> f64 {
             1.33f64
+        }
+        fn get_default_transmission_factor() -> f64 {
+            1f64
         }
     }
     pub use extension::Extension;

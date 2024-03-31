@@ -28,13 +28,13 @@ pub mod gltf {
         #[derive(Serialize, Deserialize, Debug)]
         ///glTF extension that defines a material variations for mesh primitives
         pub struct Extension {
-            pub variants: Vec<Variant>,
             #[serde(default)]
             ///JSON object with extension-specific objects.
             pub extensions: Option<Map<String, Value>>,
             #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
+            pub variants: Vec<Variant>,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {
@@ -61,14 +61,14 @@ pub mod mesh_primitive {
                 #[serde(default)]
                 ///JSON object with extension-specific objects.
                 pub extensions: Option<Map<String, Value>>,
+                #[serde(default)]
+                ///Application-specific data.
+                pub extras: Option<serde_json::Value>,
                 ///The material associated with the set of variants.
                 pub material: i64,
                 #[serde(default)]
                 ///The user-defined name of this variant material mapping.
                 pub name: Option<String>,
-                #[serde(default)]
-                ///Application-specific data.
-                pub extras: Option<serde_json::Value>,
                 ///An array of variant index values.
                 pub variants: Vec<i64>,
             }
@@ -84,11 +84,11 @@ pub mod mesh_primitive {
             #[serde(default)]
             ///JSON object with extension-specific objects.
             pub extensions: Option<Map<String, Value>>,
-            ///A list of material to variant mappings
-            pub mappings: Vec<Mapping>,
             #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
+            ///A list of material to variant mappings
+            pub mappings: Vec<Mapping>,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {

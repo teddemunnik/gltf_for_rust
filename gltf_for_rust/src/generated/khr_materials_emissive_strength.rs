@@ -6,16 +6,16 @@ pub mod material {
         #[derive(Serialize, Deserialize, Debug)]
         ///glTF extension that adjusts the strength of emissive material properties.
         pub struct Extension {
+            #[serde(default)]
+            ///JSON object with extension-specific objects.
+            pub extensions: Option<Map<String, Value>>,
+            #[serde(default)]
+            ///Application-specific data.
+            pub extras: Option<serde_json::Value>,
             #[serde(rename = "emissiveStrength")]
             #[serde(default = "get_default_emissive_strength")]
             ///The strength adjustment to be multiplied with the material's emissive value.
             pub emissive_strength: f64,
-            #[serde(default)]
-            ///Application-specific data.
-            pub extras: Option<serde_json::Value>,
-            #[serde(default)]
-            ///JSON object with extension-specific objects.
-            pub extensions: Option<Map<String, Value>>,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {

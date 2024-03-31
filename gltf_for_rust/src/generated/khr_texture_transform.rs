@@ -7,11 +7,11 @@ pub mod texture_info {
         ///glTF extension that enables shifting and scaling UV coordinates on a per-texture basis
         pub struct Extension {
             #[serde(default)]
-            ///Application-specific data.
-            pub extras: Option<serde_json::Value>,
-            #[serde(default)]
             ///JSON object with extension-specific objects.
             pub extensions: Option<Map<String, Value>>,
+            #[serde(default)]
+            ///Application-specific data.
+            pub extras: Option<serde_json::Value>,
             #[serde(default = "get_default_offset")]
             ///The offset of the UV coordinate origin as a factor of the texture dimensions.
             pub offset: [f64; 2usize],

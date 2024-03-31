@@ -6,14 +6,14 @@ pub mod animation_channel_target {
         #[derive(Serialize, Deserialize, Debug)]
         ///Extension object providing the JSON Pointer to the animated property.
         pub struct Extension {
-            ///JSON pointer to the animated property. The animation channel path value **MUST** be `pointer`.
-            pub pointer: String,
             #[serde(default)]
             ///JSON object with extension-specific objects.
             pub extensions: Option<Map<String, Value>>,
             #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
+            ///JSON pointer to the animated property. The animation channel path value **MUST** be `pointer`.
+            pub pointer: String,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {

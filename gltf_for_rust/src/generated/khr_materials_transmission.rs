@@ -6,16 +6,16 @@ pub mod material {
         #[derive(Serialize, Deserialize, Debug)]
         ///glTF extension that defines the optical transmission of a material.
         pub struct Extension {
-            #[serde(rename = "transmissionFactor")]
-            #[serde(default = "get_default_transmission_factor")]
-            ///The base percentage of light transmitted through the surface.
-            pub transmission_factor: f64,
             #[serde(default)]
             ///JSON object with extension-specific objects.
             pub extensions: Option<Map<String, Value>>,
             #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
+            #[serde(rename = "transmissionFactor")]
+            #[serde(default = "get_default_transmission_factor")]
+            ///The base percentage of light transmitted through the surface.
+            pub transmission_factor: f64,
             #[serde(rename = "transmissionTexture")]
             #[serde(default)]
             ///A texture that defines the transmission percentage of the surface, sampled from the R channel. These values are linear, and will be multiplied by transmissionFactor.

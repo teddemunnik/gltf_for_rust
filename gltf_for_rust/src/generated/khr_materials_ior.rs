@@ -7,14 +7,14 @@ pub mod material {
         ///glTF extension that defines the index of refraction of a material.
         pub struct Extension {
             #[serde(default)]
+            ///JSON object with extension-specific objects.
+            pub extensions: Option<Map<String, Value>>,
+            #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
             #[serde(default = "get_default_ior")]
             ///The index of refraction.
             pub ior: f64,
-            #[serde(default)]
-            ///JSON object with extension-specific objects.
-            pub extensions: Option<Map<String, Value>>,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {

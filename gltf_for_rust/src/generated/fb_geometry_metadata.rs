@@ -15,16 +15,16 @@ pub mod scene {
             #[serde(default = "get_default_primitive_count")]
             ///The number of distinct primitives recursively contained in this scene.
             pub primitive_count: f64,
-            #[serde(rename = "vertexCount")]
-            #[serde(default = "get_default_vertex_count")]
-            ///The number of distinct vertices recursively contained in this scene.
-            pub vertex_count: f64,
             #[serde(rename = "sceneBounds")]
             #[serde(default)]
             ///The bounding box of this scene, in static geometry scene-space coordinates.
             pub scene_bounds: Option<
                 crate::generated::fb_geometry_metadata::SceneBounds,
             >,
+            #[serde(rename = "vertexCount")]
+            #[serde(default = "get_default_vertex_count")]
+            ///The number of distinct vertices recursively contained in this scene.
+            pub vertex_count: f64,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {
@@ -51,13 +51,13 @@ mod scene_bounds {
     #[derive(Serialize, Deserialize, Debug)]
     pub struct SceneBounds {
         #[serde(default)]
+        ///JSON object with extension-specific objects.
+        pub extensions: Option<Map<String, Value>>,
+        #[serde(default)]
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         ///The bounding box corner with the numerically highest scene-space coordinates
         pub max: [f64; 3usize],
-        #[serde(default)]
-        ///JSON object with extension-specific objects.
-        pub extensions: Option<Map<String, Value>>,
         ///The bounding box corner with the numerically lowest scene-space coordinates
         pub min: [f64; 3usize],
     }
