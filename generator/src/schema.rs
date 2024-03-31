@@ -1,38 +1,47 @@
-use std::collections::HashMap;
-use std::error::Error;
-use std::fs::{File, read_dir};
-use std::io::{BufReader, ErrorKind};
-use std::path::{Path, PathBuf};
+use crate::MyError;
 use convert_case::Casing;
 use schemars::schema::{RootSchema, Schema, SchemaObject};
-use crate::{MyError};
+use std::collections::HashMap;
+use std::error::Error;
+use std::fs::{read_dir, File};
+use std::io::{BufReader, ErrorKind};
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct SchemaUri{
+pub struct SchemaUri {
     pub path: Option<String>,
     pub fragment: Option<String>,
 }
 
-impl From<&str> for SchemaUri{
+impl From<&str> for SchemaUri {
     fn from(value: &str) -> Self {
         let fragment_index = value.find('#');
-        match fragment_index{
-            Some(index) if index != 0 => SchemaUri{ path: Some(value[..index].to_string()), fragment: Some(value[(index+1)..].to_string())},
-            Some(index) => SchemaUri{ path: None, fragment: Some(value[(index+1)..].to_string())},
-            None => SchemaUri{ path: Some(value.to_string()), fragment: None }
+        match fragment_index {
+            Some(index) if index != 0 => SchemaUri {
+                path: Some(value[..index].to_string()),
+                fragment: Some(value[(index + 1)..].to_string()),
+            },
+            Some(index) => SchemaUri {
+                path: None,
+                fragment: Some(value[(index + 1)..].to_string()),
+            },
+            None => SchemaUri {
+                path: Some(value.to_string()),
+                fragment: None,
+            },
         }
     }
 }
 
-impl SchemaUri{
-    pub fn definition_name(&self) -> Option<&str>{
-        const DEFINITION_NS : &str = "/definitions/";
+impl SchemaUri {
+    pub fn definition_name(&self) -> Option<&str> {
+        const DEFINITION_NS: &str = "/definitions/";
         self.fragment.as_ref().and_then(|fragment| {
-          if fragment.starts_with(DEFINITION_NS){
-              Some(&fragment[DEFINITION_NS.len()..])
-          }else{
-              None
-          }
+            if fragment.starts_with(DEFINITION_NS) {
+                Some(&fragment[DEFINITION_NS.len()..])
+            } else {
+                None
+            }
         })
     }
 }
@@ -46,15 +55,16 @@ pub struct SchemaContext<'a> {
 
 impl<'a> SchemaContext<'a> {
     pub fn resolve<'b, 'c>(&'b self, schema: &'b SchemaObject) -> SchemaContext<'c>
-        where
-            'b: 'c,
+    where
+        'b: 'c,
     {
         if schema.is_ref() {
             let mut reference = schema.reference.as_ref().unwrap().clone();
 
             // If the reference is a local URI replace with the full URI instead
-            if reference.starts_with('#'){
-                reference = self.uri.as_ref().unwrap().path.as_ref().unwrap().to_owned() + &reference;
+            if reference.starts_with('#') {
+                reference =
+                    self.uri.as_ref().unwrap().path.as_ref().unwrap().to_owned() + &reference;
             }
 
             return SchemaContext {
@@ -63,7 +73,8 @@ impl<'a> SchemaContext<'a> {
                 schema: self
                     .schema_store
                     .lookup(&reference.as_str().into())
-                    .unwrap().1
+                    .unwrap()
+                    .1,
             };
         }
 
@@ -75,9 +86,9 @@ impl<'a> SchemaContext<'a> {
     }
 }
 
-pub enum SchemaType{
+pub enum SchemaType {
     Specification,
-    Extension(String)
+    Extension(String),
 }
 
 pub struct SchemaStore<'a> {
@@ -87,21 +98,21 @@ pub struct SchemaStore<'a> {
     base: Option<&'a SchemaStore<'a>>,
 }
 
-fn lookup_fragment<'a>(schema: &'a RootSchema, uri: &SchemaUri) -> Option<&'a SchemaObject>{
-    if let Some(definition_name) = uri.definition_name(){
-       let found_schema = schema.definitions.get(definition_name).unwrap();
-        match found_schema{
+fn lookup_fragment<'a>(schema: &'a RootSchema, uri: &SchemaUri) -> Option<&'a SchemaObject> {
+    if let Some(definition_name) = uri.definition_name() {
+        let found_schema = schema.definitions.get(definition_name).unwrap();
+        match found_schema {
             Schema::Object(object) => Some(object),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
-    }else{
+    } else {
         None
     }
 }
 
 impl<'a> SchemaStore<'a> {
-    pub fn new_specification(folder: &Path) -> Self{
-        Self{
+    pub fn new_specification(folder: &Path) -> Self {
+        Self {
             ty: SchemaType::Specification,
             schemas: HashMap::new(),
             folder: PathBuf::from(folder),
@@ -109,8 +120,12 @@ impl<'a> SchemaStore<'a> {
         }
     }
 
-    pub fn new_extension(folder: &Path, specification: &'a SchemaStore, extension_name: String) ->Self{
-        Self{
+    pub fn new_extension(
+        folder: &Path,
+        specification: &'a SchemaStore,
+        extension_name: String,
+    ) -> Self {
+        Self {
             ty: SchemaType::Extension(extension_name),
             folder: PathBuf::from(folder),
             schemas: HashMap::new(),
@@ -119,15 +134,15 @@ impl<'a> SchemaStore<'a> {
     }
 
     pub fn load(&mut self) -> Result<(), Box<dyn Error>> {
-        let dir = match read_dir(&self.folder){
+        let dir = match read_dir(&self.folder) {
             Ok(dir) => dir,
             Err(e) if e.kind() == ErrorKind::NotFound => return Ok(()),
             Err(e) => return Err(Box::new(e)),
         };
 
-        for entry in dir.into_iter().filter_map(Result::ok){
+        for entry in dir.into_iter().filter_map(Result::ok) {
             let file_name = entry.file_name().to_string_lossy().to_string();
-            if file_name.ends_with("schema.json"){
+            if file_name.ends_with("schema.json") {
                 self.read(&file_name)?;
             }
         }
@@ -155,14 +170,14 @@ impl<'a> SchemaStore<'a> {
         Ok(())
     }
 
-    pub fn is_local_uri(&self, uri: &SchemaUri) -> bool{
+    pub fn is_local_uri(&self, uri: &SchemaUri) -> bool {
         self.schemas.contains_key(uri.path.as_ref().unwrap())
     }
 
-    pub fn make_context(&self, uri: &SchemaUri) -> SchemaContext{
+    pub fn make_context(&self, uri: &SchemaUri) -> SchemaContext {
         let root_schema = self.schemas.get(uri.path.as_ref().unwrap()).unwrap();
 
-        SchemaContext{
+        SchemaContext {
             schema_store: self,
             uri: Some(uri.clone()),
             schema: &root_schema.schema,
@@ -178,13 +193,13 @@ impl<'a> SchemaStore<'a> {
             }
         }
 
-        if let Some(root) = self.schemas.get(uri.path.as_ref().unwrap()){
-            if let Some(fragment) = uri.fragment.as_ref(){
+        if let Some(root) = self.schemas.get(uri.path.as_ref().unwrap()) {
+            if let Some(fragment) = uri.fragment.as_ref() {
                 lookup_fragment(root, uri).map(|fragment| (self, fragment))
-            }else{
+            } else {
                 Some((self, &root.schema))
             }
-        }else{
+        } else {
             None
         }
     }
