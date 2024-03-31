@@ -555,8 +555,6 @@ fn write_property(
         _ => generate_rust_type(schema_store, &property.ty, name),
     };
 
-
-
     // For objects with an explicit default, create a default declaration
     let explicit_default_value = property
         .default
