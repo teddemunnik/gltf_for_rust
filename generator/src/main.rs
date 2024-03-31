@@ -1,23 +1,20 @@
+mod schema;
+
 use convert_case::{Case, Casing};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use schemars::schema::{InstanceType, Metadata, Schema, SingleOrVec};
-use schemars::visit::visit_root_schema;
-use schemars::{
-    schema::{RootSchema, SchemaObject},
-    visit::{visit_schema_object, Visitor},
-};
 use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs::read_dir;
-use std::io::BufReader;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 use std::vec::Vec;
 use std::{fs, fs::File, io::BufWriter};
 use thiserror::Error;
+use schema::{SchemaContext, SchemaStore};
 
 #[derive(Debug, Error)]
 enum MyError {
@@ -59,37 +56,6 @@ enum Type {
     MapOfObjects,
 }
 
-#[derive(Clone)]
-struct SchemaContext<'a> {
-    schema_store: &'a SchemaStore<'a>,
-    schema: &'a SchemaObject,
-    id: Option<String>,
-}
-
-impl<'a> SchemaContext<'a> {
-    fn resolve<'b, 'c>(&'b self, schema: &'b SchemaObject) -> SchemaContext<'c>
-    where
-        'b: 'c,
-    {
-        if schema.is_ref() {
-            let reference = schema.reference.as_ref().unwrap();
-            return SchemaContext {
-                schema_store: self.schema_store,
-                id: Some(reference.clone()),
-                schema: self
-                    .schema_store
-                    .lookup(reference)
-                    .unwrap(),
-            };
-        }
-
-        SchemaContext {
-            schema_store: self.schema_store,
-            id: self.id.clone(),
-            schema,
-        }
-    }
-}
 
 fn handle_field(schema: &SchemaContext) -> Result<Type, Box<dyn Error>> {
     // If we have an allOf with a single entry we can use it as our type
@@ -661,120 +627,6 @@ fn write_rust(
     write!(writer, "{}", prettyplease::unparse(&file)).unwrap();
 }
 
-struct ReferencedSchemaVisitor<'a, 'b> {
-    store: &'b mut SchemaStore<'a>,
-    result: Result<(), Box<dyn Error>>,
-}
-
-impl<'a, 'b> Visitor for ReferencedSchemaVisitor<'a, 'b> {
-    fn visit_schema_object(&mut self, schema: &mut SchemaObject) {
-        // Don't load more references once one fails
-        if self.result.is_err() {
-            return;
-        }
-
-        if !schema.is_ref() {
-            visit_schema_object(self, schema);
-            return;
-        }
-
-        // Try to load it from the base store first
-        if let Some(base_store) = self.store.base {
-            if base_store
-                .schemas
-                .contains_key(schema.reference.as_ref().unwrap())
-            {
-                return;
-            }
-        }
-
-        // Resolve the schema by path
-        self.result = self.store.read(schema.reference.as_ref().unwrap());
-    }
-}
-
-struct SchemaStore<'a> {
-    folder: PathBuf,
-    schemas: HashMap<String, RootSchema>,
-    roots: Vec<String>,
-    base: Option<&'a SchemaStore<'a>>,
-}
-
-impl<'a> SchemaStore<'a> {
-    fn new_root(folder: &Path) -> Self {
-        Self {
-            folder: PathBuf::from(folder),
-            base: None,
-            roots: Vec::new(),
-            schemas: HashMap::new(),
-        }
-    }
-
-    #[allow(unused)]
-    fn new_extension(base: &'a SchemaStore<'a>, folder: &Path) -> Self {
-        Self {
-            folder: PathBuf::from(folder),
-            base: Some(base),
-            roots: Vec::new(),
-            schemas: HashMap::new(),
-        }
-    }
-
-    fn read_root(&mut self, id: &str) -> Result<(), Box<dyn Error>> {
-        let result = self.read(id);
-        self.roots.push(id.into());
-        result
-    }
-
-    fn read(&mut self, id: &str) -> Result<(), Box<dyn Error>> {
-        let mut full_path = self.folder.clone();
-        full_path.push(id);
-
-        // Read the requested schema
-        let file = File::open(&full_path).map_err(|e| MyError::FailedToOpenSchema {
-            path: full_path.clone(),
-            inner: Box::new(e),
-        })?;
-        let reader = BufReader::new(file);
-        let mut root_schema =
-            serde_json::from_reader(reader).map_err(|e| MyError::FailedToOpenSchema {
-                path: full_path.clone(),
-                inner: Box::new(e),
-            })?;
-
-        // Read any requested subschema
-        let mut visitor = ReferencedSchemaVisitor {
-            store: self,
-            result: Result::Ok(()),
-        };
-        visit_root_schema(&mut visitor, &mut root_schema);
-        self.schemas.insert(id.to_string(), root_schema);
-        Ok(())
-    }
-
-    fn make_context(&self, name: &str) -> SchemaContext{
-        let root_schema = self.schemas.get(name).unwrap();
-
-        SchemaContext{
-            schema_store: self,
-            id: Some(name.to_string()),
-            schema: &root_schema.schema,
-        }
-    }
-
-    fn lookup(&self, name: &str) -> Option<&SchemaObject> {
-        // Try in base first
-        if let Some(base) = self.base {
-            match base.lookup(name) {
-                Some(object) => return Some(object),
-                _ => (),
-            }
-        }
-
-        // Try ourselves
-        self.schemas.get(name).map(|schema| &schema.schema)
-    }
-}
 
 #[allow(unused)]
 fn load_extensions(
