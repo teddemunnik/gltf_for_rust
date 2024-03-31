@@ -93,9 +93,9 @@ impl<'a> SchemaContext<'a> {
 
 fn handle_field(schema: &SchemaContext) -> Result<Type, Box<dyn Error>> {
     // If we have an allOf with a single entry we can use it as our type
-    if let Some(subschema) = &schema.schema.subschemas {
+    if let Some(sub_schema) = &schema.schema.subschemas {
         if let Some(Schema::Object(single_all_of)) =
-            subschema.all_of.as_ref().and_then(|all_of| all_of.first())
+            sub_schema.all_of.as_ref().and_then(|all_of| all_of.first())
         {
             let the_schema = schema.resolve(single_all_of);
             if let Some(_) = the_schema.schema.object {
@@ -120,7 +120,7 @@ fn try_match_string_enum(schema: &SchemaContext) -> Option<Enum> {
         .schema
         .subschemas
         .as_ref()
-        .and_then(|subschema| subschema.any_of.as_ref())
+        .and_then(|sub_schema| sub_schema.any_of.as_ref())
     {
         Some(any_of) => any_of,
         _ => return None,
@@ -162,7 +162,7 @@ fn try_match_int_enum(schema: &SchemaContext) -> Option<()> {
         .schema
         .subschemas
         .as_ref()
-        .and_then(|subschema| subschema.any_of.as_ref())
+        .and_then(|sub_schema| sub_schema.any_of.as_ref())
     {
         Some(any_of) => any_of,
         _ => return None,
@@ -357,7 +357,7 @@ fn recursive_read_properties(properties: &mut HashMap<String, Property>, schema:
         .schema
         .subschemas
         .as_ref()
-        .and_then(|subschema| subschema.all_of.as_ref())
+        .and_then(|sub_schema| sub_schema.all_of.as_ref())
         .and_then(|all_of| all_of.first());
     if let Some(Schema::Object(base)) = base_schema {
         let base = schema.resolve(base);
