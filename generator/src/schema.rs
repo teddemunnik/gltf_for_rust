@@ -3,14 +3,32 @@ use std::error::Error;
 use std::fs::{File, read_dir};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use convert_case::Casing;
 use schemars::schema::{RootSchema, SchemaObject};
 use crate::{MyError};
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct SchemaUri{
+    pub path: Option<String>,
+    pub fragment: Option<String>,
+}
+
+impl From<&str> for SchemaUri{
+    fn from(value: &str) -> Self {
+        let fragment_index = value.find('#');
+        match fragment_index{
+            Some(index) if index != 0 => SchemaUri{ path: Some(value[..index].to_string()), fragment: Some(value[(index+1)..].to_string())},
+            Some(index) => SchemaUri{ path: None, fragment: Some(value[(index+1)..].to_string())},
+            None => SchemaUri{ path: Some(value.to_string()), fragment: None }
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct SchemaContext<'a> {
     pub schema_store: &'a SchemaStore<'a>,
     pub schema: &'a SchemaObject,
-    pub id: Option<String>,
+    pub uri: Option<SchemaUri>,
 }
 
 impl<'a> SchemaContext<'a> {
@@ -22,17 +40,17 @@ impl<'a> SchemaContext<'a> {
             let reference = schema.reference.as_ref().unwrap();
             return SchemaContext {
                 schema_store: self.schema_store,
-                id: Some(reference.clone()),
+                uri: Some(reference.as_str().into()),
                 schema: self
                     .schema_store
-                    .lookup(reference)
+                    .lookup(&reference.as_str().into())
                     .unwrap(),
             };
         }
 
         SchemaContext {
             schema_store: self.schema_store,
-            id: self.id.clone(),
+            uri: self.uri.clone(),
             schema,
         }
     }
@@ -90,26 +108,26 @@ impl<'a> SchemaStore<'a> {
         Ok(())
     }
 
-    pub fn make_context(&self, name: &str) -> SchemaContext{
-        let root_schema = self.schemas.get(name).unwrap();
+    pub fn make_context(&self, uri: &SchemaUri) -> SchemaContext{
+        let root_schema = self.schemas.get(uri.path.as_ref().unwrap()).unwrap();
 
         SchemaContext{
             schema_store: self,
-            id: Some(name.to_string()),
+            uri: Some(uri.clone()),
             schema: &root_schema.schema,
         }
     }
 
-    pub fn lookup(&self, name: &str) -> Option<&SchemaObject> {
+    pub fn lookup(&self, uri: &SchemaUri) -> Option<&SchemaObject> {
         // Try in base first
         if let Some(base) = self.base {
-            match base.lookup(name) {
+            match base.lookup(uri) {
                 Some(object) => return Some(object),
                 _ => (),
             }
         }
 
         // Try ourselves
-        self.schemas.get(name).map(|schema| &schema.schema)
+        self.schemas.get(uri.path.as_ref().unwrap()).map(|schema| &schema.schema)
     }
 }

@@ -15,6 +15,7 @@ use std::vec::Vec;
 use std::{fs, fs::File, io::BufWriter};
 use thiserror::Error;
 use schema::{SchemaContext, SchemaStore};
+use crate::schema::SchemaUri;
 
 #[derive(Debug, Error)]
 enum MyError {
@@ -47,7 +48,7 @@ enum Type {
     Any,
     Array(ArrayType),
     FixedArray(FixedArrayType),
-    TypedObject(String),
+    TypedObject(SchemaUri),
     String,
     Boolean,
     Number,
@@ -65,7 +66,7 @@ fn handle_field(schema: &SchemaContext) -> Result<Type, Box<dyn Error>> {
         {
             let the_schema = schema.resolve(single_all_of);
             if let Some(_) = the_schema.schema.object {
-                return Ok(Type::TypedObject(the_schema.id.unwrap()));
+                return Ok(Type::TypedObject(the_schema.uri.unwrap()));
             }
         }
     }
@@ -182,8 +183,8 @@ fn handle_object_type(schema: &SchemaContext) -> Result<Option<Type>, Box<dyn Er
         }
 
         // If the object has a title, it's a typed object
-    } else if let Some(id) = &schema.id{
-        Ok(Some(Type::TypedObject(id.clone())))
+    } else if let Some(uri) = &schema.uri{
+        Ok(Some(Type::TypedObject(uri.clone())))
     } else{
         Ok(None)
     }
@@ -296,14 +297,14 @@ fn generate_rust_type(
     }
 }
 
-fn schedule_types(open_types: &mut Vec<String>, closed_types: &HashSet<String>, ty: &Type) {
+fn schedule_types(open_types: &mut Vec<SchemaUri>, closed_types: &HashSet<SchemaUri>, ty: &Type) {
     match ty {
         Type::Array(array_type) => {
             schedule_types(open_types, closed_types, array_type.item.as_ref())
         }
-        Type::TypedObject(id) => {
-            if !closed_types.contains(id) && !open_types.contains(id) {
-                open_types.push(id.clone());
+        Type::TypedObject(uri) => {
+            if !closed_types.contains(uri) && !open_types.contains(uri){
+                open_types.push(uri.clone());
             }
         }
         _ => (),
@@ -425,14 +426,14 @@ fn generate_property_identifier(name: &str) -> Ident {
 
 /// Writes a rust type into a unique module with helper functions and type surrounding it
 struct RustTypeWriter<'a> {
-    open_types: &'a mut Vec<String>,
-    closed_types: &'a HashSet<String>,
+    open_types: &'a mut Vec<SchemaUri>,
+    closed_types: &'a HashSet<SchemaUri>,
     embedded_enums: Vec<TokenStream>,
     default_declarations: Vec<TokenStream>,
 }
 
 impl<'a> RustTypeWriter<'a> {
-    fn new<'b>(open_types: &'b mut Vec<String>, closed_types: &'b HashSet<String>) -> Self
+    fn new<'b>(open_types: &'b mut Vec<SchemaUri>, closed_types: &'b HashSet<SchemaUri>) -> Self
     where
         'b: 'a,
     {
@@ -558,8 +559,8 @@ fn write_property(
 
 fn generate_structure(
     mod_identifier: &Ident,
-    open_types: &mut Vec<String>,
-    closed_types: &HashSet<String>,
+    open_types: &mut Vec<SchemaUri>,
+    closed_types: &HashSet<SchemaUri>,
     name: &Ident,
     comment: Option<&String>,
     schema: &SchemaContext,
@@ -606,8 +607,8 @@ fn generate_structure(
 fn write_rust(
     schema: &SchemaContext,
     writer: &mut dyn std::io::Write,
-    open_types: &mut Vec<String>,
-    closed_types: &HashSet<String>,
+    open_types: &mut Vec<SchemaUri>,
+    closed_types: &HashSet<SchemaUri>,
 ) {
     let metadata = schema.schema.metadata.as_ref().unwrap();
 
@@ -689,7 +690,7 @@ fn load_extensions(
                 "The {extension_name} extension for {base_object_name}"
             ));
 
-            let schema = extension_schema_store.make_context(&name);
+            let schema = extension_schema_store.make_context(&name.as_str().into());
 
             let mut open_types = Vec::new();
             let closed_types = HashSet::new();
@@ -797,7 +798,7 @@ fn main() {
     // Collect root types:
     let mut closed_types = HashSet::new();
     let mut open_types = Vec::new();
-    open_types.push("glTF.schema.json".to_string());
+    open_types.push(SchemaUri::from("glTF.schema.json"));
 
     while !open_types.is_empty() {
         let id = open_types.pop().unwrap();
