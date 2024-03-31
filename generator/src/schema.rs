@@ -4,7 +4,7 @@ use std::fs::{File, read_dir};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use convert_case::Casing;
-use schemars::schema::{RootSchema, SchemaObject};
+use schemars::schema::{RootSchema, Schema, SchemaObject};
 use crate::{MyError};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -60,6 +60,24 @@ pub struct SchemaStore<'a> {
     folder: PathBuf,
     pub schemas: HashMap<String, RootSchema>,
     base: Option<&'a SchemaStore<'a>>,
+}
+
+fn lookup_definition_fragment<'a>(namespace: &str, fragment: &str, schema: &'a RootSchema) -> Option<&'a SchemaObject>{
+    if fragment.starts_with(namespace){
+        let definition_name = &fragment[namespace.len()..];
+        let found_schema = schema.definitions.get(definition_name);
+        found_schema.map(|schema| match schema{
+            Schema::Object(object) => object,
+            _ => unreachable!()
+        })
+    }
+    else{
+        None
+    }
+}
+
+fn lookup_fragment<'a>(schema: &'a RootSchema, fragment: &str) -> Option<&'a SchemaObject>{
+    lookup_definition_fragment("/definitions/", fragment, schema).or_else(|| lookup_definition_fragment("/$defs/", fragment, schema))
 }
 
 impl<'a> SchemaStore<'a> {
@@ -127,7 +145,12 @@ impl<'a> SchemaStore<'a> {
             }
         }
 
-        // Try ourselves
-        self.schemas.get(uri.path.as_ref().unwrap()).map(|schema| &schema.schema)
+        let root = self.schemas.get(uri.path.as_ref().unwrap()).unwrap();
+
+        if let Some(fragment) = uri.fragment.as_ref(){
+            lookup_fragment(root, &fragment)
+        }else{
+            Some(&root.schema)
+        }
     }
 }
