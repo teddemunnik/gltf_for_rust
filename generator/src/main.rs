@@ -331,7 +331,7 @@ fn generate_rust_type(schema_store: &SchemaStore, ty: &Type, field_name: &String
         Type::MapOfObjects => quote! { Map<String, Value> },
         Type::EmbeddedObject{name, prototype} => {
             let ident = Ident::new(
-                &plural_to_singular(field_name).to_case(Case::UpperCamel),
+                &name.clone().unwrap_or_else(|| plural_to_singular(field_name.as_str())).to_case(Case::UpperCamel),
                 Span::call_site(),
             );
             quote! { #ident }
@@ -469,6 +469,8 @@ fn get_raw_name(context: &SchemaContext) -> Option<String>{
     // Or use the title
     let title = context.schema.metadata.as_ref().and_then(|metadata| metadata.title.as_ref());
     if let Some(title) = title{
+        let title = title.to_lowercase();
+
         // Remove module prefix from title
         let prefix_end = title.find(' ');
         if let Some(prefix_end) = prefix_end {
@@ -942,20 +944,6 @@ fn main() {
         SchemaStore::new_specification(&PathBuf::from("vendor\\gltf\\specification\\2.0\\schema"));
     specification_schema_store.load().unwrap();
 
-    let mut generated_manifest = GeneratedManifest::new();
-    load_extensions(
-        &mut generated_manifest,
-        "vendor\\gltf\\extensions\\2.0\\Khronos",
-        generated_path,
-        &specification_schema_store,
-    ).unwrap();
-
-    load_extensions(
-        &mut generated_manifest,
-        "vendor\\gltf\\extensions\\2.0\\Vendor",
-        generated_path,
-        &specification_schema_store,
-    ).unwrap();
 
     // Collect root types:
     let mut closed_types = HashSet::new();
@@ -980,6 +968,22 @@ fn main() {
     let output = File::create(format!("{generated_path}\\gltf.rs")).unwrap();
     let mut writer = BufWriter::new(output);
     write!(writer, "{}", prettyplease::unparse(&file)).unwrap();
+
+
+    let mut generated_manifest = GeneratedManifest::new();
+    load_extensions(
+        &mut generated_manifest,
+        "vendor\\gltf\\extensions\\2.0\\Khronos",
+        generated_path,
+        &specification_schema_store,
+    ).unwrap();
+
+    load_extensions(
+        &mut generated_manifest,
+        "vendor\\gltf\\extensions\\2.0\\Vendor",
+        generated_path,
+        &specification_schema_store,
+    ).unwrap();
 
     write_root_module(generated_path, &generated_manifest);
 }
