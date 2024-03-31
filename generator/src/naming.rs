@@ -79,6 +79,10 @@ pub fn generate_base_module_identifier(name: &str) -> Ident{
     )
 }
 
+pub fn generate_enum_type_identifier(name: &str) -> Ident{
+    Ident::new(&name.to_case(Case::UpperCamel), Span::call_site())
+}
+
 pub fn generate_type_identifier(name: &str) -> Ident{
     Ident::new(&name.to_case(Case::UpperCamel), Span::call_site())
 }

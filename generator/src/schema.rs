@@ -1,6 +1,6 @@
 use crate::MyError;
 use schemars::schema::{RootSchema, Schema, SchemaObject};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 use std::fs::{read_dir, File};
 use std::io::{BufReader, ErrorKind};
@@ -92,7 +92,7 @@ pub enum SchemaType {
 pub struct SchemaStore<'a> {
     pub ty: SchemaType,
     folder: PathBuf,
-    pub schemas: HashMap<String, RootSchema>,
+    pub schemas: BTreeMap<String, RootSchema>,
     base: Option<&'a SchemaStore<'a>>,
 }
 
@@ -112,7 +112,7 @@ impl<'a> SchemaStore<'a> {
     pub fn new_specification(folder: &Path) -> Self {
         Self {
             ty: SchemaType::Specification,
-            schemas: HashMap::new(),
+            schemas: BTreeMap::new(),
             folder: PathBuf::from(folder),
             base: None,
         }
@@ -126,7 +126,7 @@ impl<'a> SchemaStore<'a> {
         Self {
             ty: SchemaType::Extension(extension_name),
             folder: PathBuf::from(folder),
-            schemas: HashMap::new(),
+            schemas: BTreeMap::new(),
             base: Some(specification),
         }
     }

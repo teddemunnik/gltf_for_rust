@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::vec::Vec;
 use std::{fs, fs::File, io::BufWriter};
 use thiserror::Error;
-use crate::naming::{generate_option_identifier, generate_property_name};
+use crate::naming::{generate_enum_type_identifier, generate_option_identifier, generate_property_name};
 
 fn plural_to_singular(maybe_plural: &str) -> String {
     if let Some(singular) = maybe_plural.strip_suffix("ies"){
@@ -505,7 +505,7 @@ fn write_embedded_enum(
     enumeration: &Enum,
     default: &Option<Value>,
 ) -> TokenStream {
-    let rusty_enum_name = Ident::new(&property_name.to_case(Case::UpperCamel), Span::call_site());
+    let enum_identifier= generate_enum_type_identifier(property_name);
     let enum_options = enumeration.options.iter().map(|option| {
         let identifier = generate_option_identifier(option);
 
@@ -526,7 +526,7 @@ fn write_embedded_enum(
     quote! {
         #[derive(Serialize, Deserialize, Debug)]
         #default_declaration
-        pub enum #rusty_enum_name{
+        pub enum #enum_identifier{
             #(#enum_options),*
         }
     }
