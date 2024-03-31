@@ -18,7 +18,9 @@ use std::{fs, fs::File, io::BufWriter};
 use thiserror::Error;
 
 fn plural_to_singular(maybe_plural: &str) -> String {
-    if let Some(singular) =maybe_plural.strip_suffix('s'){
+    if let Some(singular) = maybe_plural.strip_suffix("ies"){
+        format!("{}y", singular)
+    }else if let Some(singular) = maybe_plural.strip_suffix('s') {
         String::from(singular)
     } else {
         String::from(maybe_plural)
@@ -35,7 +37,7 @@ enum MyError {
     #[error("Unhandled instance type")]
     UnhandledInstanceType(Option<SingleOrVec<InstanceType>>),
     #[error("Unhandled array item type")]
-    UnhandledArrayItemType,
+    UnhandledArrayItemType(Option<SingleOrVec<Schema>>),
 }
 
 struct Enum {
@@ -81,13 +83,21 @@ fn handle_field(
     open_types: &mut Vec<SchemaUri>,
     closed_types: &HashSet<SchemaUri>,
 ) -> Result<Type, Box<dyn Error>> {
+    // Extensible string enum
     if let Some(enumeration) = try_match_string_enum(schema) {
         return Ok(Type::Enum(enumeration));
     }
 
+    // Extensible int enum
     if try_match_int_enum(schema).is_some() {
         return Ok(Type::Integer);
     }
+
+    // Specific string enum
+    if let Some(enumeration) = schema.schema.enum_values.as_ref() {
+        return Ok(Type::Enum(Enum { options: enumeration.iter().map(|value| value.as_str().unwrap().to_string()).collect() }));
+    }
+
 
     handle_type(schema, open_types, closed_types)
 }
@@ -200,6 +210,7 @@ fn handle_object_type(
         comment,
     })))
 }
+
 fn handle_type_from_instance_type(
     schema: &SchemaContext,
     open_types: &mut Vec<SchemaUri>,
@@ -256,9 +267,9 @@ fn handle_array(
     let single_item_type = match array.items.as_ref() {
         Some(SingleOrVec::Single(ty)) => match ty.as_ref() {
             Schema::Object(object) => object,
-            _ => return Err(Box::new(MyError::UnhandledArrayItemType)),
+            _ => return Err(Box::new(MyError::UnhandledArrayItemType(array.items.clone()))),
         },
-        _ => return Err(Box::new(MyError::UnhandledArrayItemType)),
+        _ => return Err(Box::new(MyError::UnhandledArrayItemType(array.items.clone()))),
     };
 
     let single_item_type = schema.resolve(single_item_type);
@@ -557,14 +568,15 @@ fn write_property(
     name: &String,
     property: &Property,
 ) -> TokenStream {
+
     let rust_type = match (&property.ty, property.optional) {
         // Remove the Option for optional Vec's with a minimum length of 1
         // This way we can guarantee this invariant by telling serde to not serialize zero length vecs.
         (Type::Array(array_type), true)
-            if array_type.min_length.is_some() && array_type.min_length.unwrap() == 1 =>
-        {
-            generate_rust_type(schema_store, &property.ty, name)
-        }
+        if array_type.min_length.is_some() && array_type.min_length.unwrap() == 1 =>
+            {
+                generate_rust_type(schema_store, &property.ty, name)
+            }
 
         // Remove the Option for optional properties which have a default value specified.
         (_, true) if property.default.is_none() => {
@@ -574,6 +586,8 @@ fn write_property(
         _ => generate_rust_type(schema_store, &property.ty, name),
     };
 
+    let rust_property_name = name.to_case(Case::Snake).replace("type", "ty").replace('@', "");
+
     // For objects with an explicit default, create a default declaration
     let explicit_default_value = property
         .default
@@ -581,7 +595,7 @@ fn write_property(
         .map(|default| generate_default_value_token(&property.ty, default, name));
     let default_declaration = explicit_default_value.as_ref().map(|_| {
         Ident::new(
-            &format!("get_default_{}", name.to_case(Case::Snake)),
+            &format!("get_default_{}", &rust_property_name),
             Span::call_site(),
         )
     });
@@ -600,6 +614,7 @@ fn write_property(
         });
     }
 
+
     let default_declaration = default_declaration
         .as_ref()
         .map(|declaration| {
@@ -613,9 +628,9 @@ fn write_property(
 
     // If the property identifier is different from the one in the spec we need to add a serde
     // rename to make it match the spec.
-    let property_ident = generate_property_identifier(name);
+    let property_ident = Ident::new(&rust_property_name, Span::call_site());
     let rename_declaration =
-        if property_ident.to_string().partial_cmp(name) != Some(Ordering::Equal) {
+        if rust_property_name.partial_cmp(name) != Some(Ordering::Equal) {
             Some(quote![#[serde(rename = #name)]])
         } else {
             None
@@ -657,7 +672,7 @@ fn generate_structure(
     object_prototype: &ObjectPrototype,
     schema_store: &SchemaStore,
 ) -> TokenStream {
-    let mod_identifier = Ident::new(&name.to_case(Case::Snake), Span::call_site());
+    let mod_identifier = &generate_property_identifier(name);
     let type_identifier = Ident::new(&name.to_case(Case::UpperCamel), Span::call_site());
 
     let mut property_tokens = Vec::new();
@@ -823,7 +838,7 @@ fn load_extensions(
             });
         }
 
-        while let Some(uri) = open_types.pop(){
+        /*while let Some(uri) = open_types.pop() {
             closed_types.insert(uri.clone());
             if !extension_schema_store.is_local_uri(&uri) {
                 continue;
@@ -831,17 +846,19 @@ fn load_extensions(
 
             let schema = extension_schema_store.make_context(&uri);
             extension_module.push(generate_rust(&schema, &mut open_types, &closed_types));
-        }
+        }*/
 
         let output = File::create(format!("{generated_path}\\{extension_module_name}.rs")).unwrap();
         let mut writer = BufWriter::new(output);
 
-        let rust_file: syn::File = syn::parse2(quote! {
+        let rust = quote! {
             #![allow(clippy::all, unused_imports)]
 
             #(#extension_module)*
-        })
-        .unwrap();
+        };
+
+        let rust_file: syn::File = syn::parse2(rust).unwrap();
+
 
         write!(writer, "{}", prettyplease::unparse(&rust_file)).unwrap();
 
@@ -904,7 +921,7 @@ fn write_root_module(generated_path: &str, generated_manifest: &GeneratedManifes
         pub mod gltf;
         #(#extension_modules)*
     })
-    .unwrap();
+        .unwrap();
 
     write!(writer, "{}", prettyplease::unparse(&rust_file)).unwrap();
 }
@@ -925,30 +942,35 @@ fn main() {
         "vendor\\gltf\\extensions\\2.0\\Khronos",
         generated_path,
         &specification_schema_store,
-    )
-    .unwrap();
+    ).unwrap();
 
+    load_extensions(
+        &mut generated_manifest,
+        "vendor\\gltf\\extensions\\2.0\\Vendor",
+        generated_path,
+        &specification_schema_store,
+    ).unwrap();
 
     // Collect root types:
     let mut closed_types = HashSet::new();
     let mut open_types = Vec::new();
 
-    let mut types =Vec::new();
+    let mut types = Vec::new();
     open_types.push(SchemaUri::from("glTF.schema.json"));
 
-    while let Some(uri) = open_types.pop(){
+    while let Some(uri) = open_types.pop() {
         closed_types.insert(uri.clone());
         let schema = specification_schema_store.make_context(&uri);
         types.push(generate_rust(&schema, &mut open_types, &closed_types));
     }
 
-    let rust = quote!{
+    let rust = quote! {
         #![allow(clippy::all, unused_imports)]
 
         #(#types)*
     };
 
-    let file : syn::File = syn::parse2(rust).unwrap();
+    let file: syn::File = syn::parse2(rust).unwrap();
     let output = File::create(format!("{generated_path}\\gltf.rs")).unwrap();
     let mut writer = BufWriter::new(output);
     write!(writer, "{}", prettyplease::unparse(&file)).unwrap();
