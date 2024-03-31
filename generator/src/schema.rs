@@ -100,39 +100,42 @@ fn lookup_fragment<'a>(schema: &'a RootSchema, uri: &SchemaUri) -> Option<&'a Sc
 }
 
 impl<'a> SchemaStore<'a> {
-    pub fn load(folder: &Path, base: Option<&'a SchemaStore>) -> Result<Self, Box<dyn Error>> {
-        let mut store = Self{
+    pub fn new_specification(folder: &Path) -> Self{
+        Self{
             ty: SchemaType::Specification,
             schemas: HashMap::new(),
             folder: PathBuf::from(folder),
-            base
-        };
+            base: None,
+        }
+    }
 
-        let dir = match read_dir(folder){
+    pub fn new_extension(folder: &Path, specification: &'a SchemaStore, extension_name: String) ->Self{
+        Self{
+            ty: SchemaType::Extension(extension_name),
+            folder: PathBuf::from(folder),
+            schemas: HashMap::new(),
+            base: Some(specification),
+        }
+    }
+
+    pub fn load(&mut self) -> Result<(), Box<dyn Error>> {
+        let dir = match read_dir(&self.folder){
             Ok(dir) => dir,
-            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(store),
+            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(()),
             Err(e) => return Err(Box::new(e)),
         };
 
         for entry in dir.into_iter().filter_map(Result::ok){
             let file_name = entry.file_name().to_string_lossy().to_string();
             if file_name.ends_with("schema.json"){
-                store.read(&file_name)?;
+                self.read(&file_name)?;
             }
         }
 
-        Ok(store)
+        Ok(())
     }
 
-    pub fn new_extension(base: &'a SchemaStore<'a>, folder: &Path, extension_name: String) -> Self {
-        Self {
-            ty: SchemaType::Extension(extension_name),
-            folder: PathBuf::from(folder),
-            base: Some(base),
-            schemas: HashMap::new(),
-        }
-    }
-    pub fn read(&mut self, id: &str) -> Result<(), Box<dyn Error>> {
+    fn read(&mut self, id: &str) -> Result<(), Box<dyn Error>> {
         let mut full_path = self.folder.clone();
         full_path.push(id);
 

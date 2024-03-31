@@ -251,10 +251,10 @@ fn generate_named_type_path(store: &SchemaStore, uri: &SchemaUri) -> TokenStream
     let type_name = Ident::new(&name.to_case(Case::UpperCamel), Span::call_site());
 
     match ty{
-        SchemaType::Specification => quote!{ crate::gltf::#namespace_name::#type_name},
+        SchemaType::Specification => quote!{ crate::generated::gltf::#namespace_name::#type_name},
         SchemaType::Extension(name) => {
-            let extension_module = Ident::new(name, Span::call_site());
-            quote! { crate::#extension_module::#namespace_name::#type_name }
+            let extension_module = Ident::new(&name.to_lowercase(), Span::call_site());
+            quote! { crate::generated::#extension_module::#namespace_name::#type_name }
         }
     }
 }
@@ -403,7 +403,7 @@ fn generate_default_value_token(ty: &Type, default: &Value, field_name: &String)
 
 fn get_raw_name(store: &SchemaStore, uri: &SchemaUri) -> String{
     if let Some(definition_name) = uri.definition_name(){
-        return definition_name.to_string()
+        return definition_name.to_lowercase();
     }
 
     let title = store.lookup(uri).unwrap().1.metadata.as_ref().unwrap().title.as_ref().unwrap().to_lowercase();
@@ -668,7 +668,8 @@ fn load_extensions(
         schemas_path.push("schema");
         let extension_schema_suffix = format!("{}.schema.json", &extension_name);
 
-        let mut extension_schema_store = SchemaStore::load(&schemas_path, Some(specification_schema)).unwrap();
+        let mut extension_schema_store = SchemaStore::new_extension(&schemas_path, specification_schema, extension_name.clone());
+        extension_schema_store.load();
 
         let mut extension_module = Vec::new();
 
@@ -810,7 +811,8 @@ fn main() {
     ensure_empty_dir(generated_path);
 
     // Create the core specification schema store
-    let specification_schema_store = SchemaStore::load(&PathBuf::from("vendor\\gltf\\specification\\2.0\\schema"), None).unwrap();
+    let mut specification_schema_store = SchemaStore::new_specification(&PathBuf::from("vendor\\gltf\\specification\\2.0\\schema"));
+    specification_schema_store.load().unwrap();
 
     let mut generated_manifest = GeneratedManifest::new();
     load_extensions(&mut generated_manifest, "vendor\\gltf\\extensions\\2.0\\Khronos", generated_path, &specification_schema_store).unwrap();
