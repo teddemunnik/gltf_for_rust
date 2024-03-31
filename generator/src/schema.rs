@@ -145,6 +145,10 @@ impl<'a> SchemaStore<'a> {
         Ok(())
     }
 
+    pub fn is_local_uri(&self, uri: &SchemaUri) -> bool{
+        self.schemas.contains_key(uri.path.as_ref().unwrap())
+    }
+
     pub fn make_context(&self, uri: &SchemaUri) -> SchemaContext{
         let root_schema = self.schemas.get(uri.path.as_ref().unwrap()).unwrap();
 

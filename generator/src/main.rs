@@ -59,17 +59,6 @@ enum Type {
 
 
 fn handle_field(schema: &SchemaContext) -> Result<Type, Box<dyn Error>> {
-    // If we have an allOf with a single entry we can use it as our type
-    if let Some(sub_schema) = &schema.schema.subschemas {
-        if let Some(Schema::Object(single_all_of)) =
-            sub_schema.all_of.as_ref().and_then(|all_of| all_of.first())
-        {
-            let the_schema = schema.resolve(single_all_of);
-            if let Some(_) = the_schema.schema.object {
-                return Ok(Type::TypedObject(the_schema.uri.unwrap()));
-            }
-        }
-    }
 
     if let Some(enumeration) = try_match_string_enum(schema) {
         return Ok(Type::Enum(enumeration));
@@ -612,28 +601,25 @@ fn generate_structure(
     }
 }
 
-fn write_rust(
+fn generate_rust(
     schema: &SchemaContext,
-    writer: &mut dyn std::io::Write,
     open_types: &mut Vec<SchemaUri>,
-    closed_types: &HashSet<SchemaUri>,
-) {
+        closed_types: &HashSet<SchemaUri>,
+    ) -> TokenStream {
     let metadata = schema.schema.metadata.as_ref().unwrap();
 
     let mod_identifier = generate_module_identifier(schema.schema_store, schema.uri.as_ref().unwrap());
     let comment = metadata.description.as_ref();
     let name = generate_struct_identifier(schema.schema_store, schema.uri.as_ref().unwrap());
 
-    let tokens = generate_structure(
+    generate_structure(
         &mod_identifier,
         open_types,
         closed_types,
         &name,
         comment,
         schema,
-    );
-    let file: syn::File = syn::parse2(tokens).unwrap();
-    write!(writer, "{}", prettyplease::unparse(&file)).unwrap();
+    )
 }
 
 
@@ -701,7 +687,7 @@ fn load_extensions(
             let schema = extension_schema_store.make_context(&name.as_str().into());
 
             let mut open_types = Vec::new();
-            let closed_types = HashSet::new();
+            let mut closed_types = HashSet::new();
 
             extension_module.push(generate_structure(
                 &base_object_module_ident,
@@ -711,6 +697,21 @@ fn load_extensions(
                 extension_doc.as_ref(),
                 &schema,
             ));
+
+            while !open_types.is_empty() {
+                let uri= open_types.pop().unwrap();
+                closed_types.insert(uri.clone());
+                if !extension_schema_store.is_local_uri(&uri){
+                    continue;
+                }
+
+                let schema = extension_schema_store.make_context(&uri);
+                extension_module.push(generate_rust(
+                    &schema,
+                    &mut open_types,
+                    &closed_types,
+                ));
+            }
         }
 
         let output = File::create(format!("{generated_path}\\{extension_module_name}.rs")).unwrap();
@@ -813,12 +814,14 @@ fn main() {
         closed_types.insert(id.clone());
         let schema = specification_schema_store.make_context(&id);
 
-        write_rust(
+        let rust = generate_rust(
             &schema,
-            &mut writer,
             &mut open_types,
             &closed_types,
         );
+
+        let file : syn::File = syn::parse2(rust).unwrap();
+        write!(&mut writer, "{}", prettyplease::unparse(&file));
     }
 
     write_root_module(generated_path, &generated_manifest);
