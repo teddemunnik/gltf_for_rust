@@ -15,10 +15,9 @@ use std::path::{Path, PathBuf};
 use std::vec::Vec;
 use std::{fs, fs::File, io::BufWriter};
 use std::cmp::Ordering;
-use std::fs::{FileType, read_dir};
+use std::fs::{read_dir};
 use thiserror::Error;
 use std::io::Write;
-use walkdir::WalkDir;
 
 #[derive(Debug, Error)]
 enum MyError {
