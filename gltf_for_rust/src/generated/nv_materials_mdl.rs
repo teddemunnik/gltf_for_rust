@@ -96,7 +96,7 @@ mod module {
         #[serde(rename = "mimeType")]
         #[serde(default)]
         ///The MDL module's media type.  This field **MUST** be defined when `bufferView` is defined.
-        pub mime_ty: Option<MimeType>,
+        pub mime_type: Option<MimeType>,
         #[serde(rename = "modulePath")]
         #[serde(default)]
         ///Relative path of the module.  This field **MUST** be defined if `bufferView` is defined or `uri` is defined and contains a data-URI, otherwise this field **MUST NOT** be defined.
@@ -178,7 +178,7 @@ mod function_call_type {
         pub module: Option<i64>,
         #[serde(rename = "typeName")]
         ///The unqualified name of the type.
-        pub ty_name: String,
+        pub type_name: String,
     }
     impl crate::GltfObject for FunctionCallType {
         fn extensions(&self) -> &Option<Map<String, Value>> {
@@ -248,7 +248,7 @@ mod bsdf_measurement {
         #[serde(rename = "mimeType")]
         #[serde(default)]
         ///The BSDF measurement's media type.  This field **MUST** be defined when `bufferView` is defined.
-        pub mime_ty: Option<MimeType>,
+        pub mime_type: Option<MimeType>,
         #[serde(default)]
         ///The URI (or IRI) of the MBSDF.
         pub uri: Option<String>,

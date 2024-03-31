@@ -605,7 +605,7 @@ mod image {
         #[serde(rename = "mimeType")]
         #[serde(default)]
         ///The image's media type. This field **MUST** be defined when `bufferView` is defined.
-        pub mime_ty: Option<MimeType>,
+        pub mime_type: Option<MimeType>,
         #[serde(default)]
         ///The URI (or IRI) of the image.
         pub uri: Option<String>,
@@ -988,7 +988,7 @@ mod accessor {
         pub byte_offset: i64,
         #[serde(rename = "componentType")]
         ///The datatype of the accessor's components.
-        pub component_ty: i64,
+        pub component_type: i64,
         ///The number of elements referenced by this accessor.
         pub count: i64,
         #[serde(default)]
@@ -1097,7 +1097,7 @@ mod accessor_sparse_indices {
         pub byte_offset: i64,
         #[serde(rename = "componentType")]
         ///The indices data type.
-        pub component_ty: i64,
+        pub component_type: i64,
     }
     impl crate::GltfObject for AccessorSparseIndices {
         fn extensions(&self) -> &Option<Map<String, Value>> {

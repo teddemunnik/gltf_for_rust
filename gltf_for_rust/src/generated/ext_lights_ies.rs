@@ -94,7 +94,7 @@ mod light_profile {
         #[serde(rename = "mimeType")]
         #[serde(default)]
         ///The light profile's media type. This field **MUST** be defined when `bufferView` is defined.
-        pub mime_ty: Option<MimeType>,
+        pub mime_type: Option<MimeType>,
         #[serde(default)]
         ///The URI (or IRI) of the light profile.
         pub uri: Option<String>,

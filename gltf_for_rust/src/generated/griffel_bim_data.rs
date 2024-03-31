@@ -41,10 +41,9 @@ pub mod gltf {
             #[serde(rename = "propertyValues")]
             ///Collection of unique property values.
             pub property_values: Vec<String>,
-            #[serde(rename = "types")]
             #[serde(default)]
             ///Collection of types - common sets of properties for many nodes.
-            pub tys: Vec<NodeType>,
+            pub types: Vec<NodeType>,
         }
     }
     pub use extension::Extension;
