@@ -1,4 +1,4 @@
-use crate::generated::gltf::gltf::Gltf;
+use crate::generated::gltf::Gltf;
 use serde_json;
 use std::fs::File;
 use std::io::BufReader;

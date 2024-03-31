@@ -57,6 +57,11 @@ enum Type {
     MapOfObjects,
 }
 
+struct ObjectType{
+    name: String,
+    comment: Option<String>,
+    properties: HashMap<String, Property>,
+}
 
 fn handle_field(schema: &SchemaContext) -> Result<Type, Box<dyn Error>> {
 
@@ -246,15 +251,13 @@ fn handle_array(schema: &SchemaContext) -> Result<Type, Box<dyn Error>> {
 fn generate_named_type_path(store: &SchemaStore, uri: &SchemaUri) -> TokenStream{
     let ty = &store.lookup(uri).unwrap().0.ty;
     let name = get_raw_name(store, uri);
-
-    let namespace_name = Ident::new(&name.to_case(Case::Snake), Span::call_site());
     let type_name = Ident::new(&name.to_case(Case::UpperCamel), Span::call_site());
 
     match ty{
-        SchemaType::Specification => quote!{ crate::generated::gltf::#namespace_name::#type_name},
+        SchemaType::Specification => quote!{ crate::generated::gltf::#type_name},
         SchemaType::Extension(name) => {
             let extension_module = Ident::new(&name.to_lowercase(), Span::call_site());
-            quote! { crate::generated::#extension_module::#namespace_name::#type_name }
+            quote! { crate::generated::#extension_module::#type_name }
         }
     }
 }
@@ -568,36 +571,45 @@ fn write_property(
     }
 }
 
-fn generate_structure(
-    mod_identifier: &Ident,
-    open_types: &mut Vec<SchemaUri>,
-    closed_types: &HashSet<SchemaUri>,
-    name: &Ident,
-    comment: Option<&String>,
-    schema: &SchemaContext,
-) -> TokenStream {
+fn read_typed_object(schema: &SchemaContext, open_list: &mut Vec<SchemaUri>, closed_list: &HashSet<SchemaUri>) -> ObjectType{
+    let name =get_raw_name(schema.schema_store, schema.uri.as_ref().unwrap());
+    let comment = schema.schema.metadata.as_ref().unwrap().description.clone();
     let mut properties = HashMap::new();
     recursive_read_properties(&mut properties, &schema);
+    ObjectType{
+        name,
+        comment,
+        properties
+    }
+}
+
+fn generate_structure(
+    object_type: &ObjectType,
+    schema_store: &SchemaStore,
+    open_types: &mut Vec<SchemaUri>,
+    closed_types: &HashSet<SchemaUri>
+) -> TokenStream {
+
+    let mod_identifier = Ident::new(&object_type.name.to_case(Case::Snake), Span::call_site());
+    let type_identifier = Ident::new(&object_type.name.to_case(Case::UpperCamel), Span::call_site());
+
     let mut property_tokens = Vec::new();
     let mut type_writer = RustTypeWriter::new(open_types, closed_types);
-    for (name, property) in properties.iter() {
+    for (name, property) in object_type.properties.iter() {
         property_tokens.push(write_property(
-            schema.schema_store,
+            schema_store,
             &mut type_writer,
             name,
             property,
         ));
     }
-    let doc = match comment {
-        Some(comment) => Some(quote! { #[doc=#comment]}),
-        _ => None,
-    };
 
+    let doc = object_type.comment.as_ref().map(|comment| quote!{ #[doc=#comment]});
     let embedded_enums = &type_writer.embedded_enums;
     let default_declarations = &type_writer.default_declarations;
 
     quote! {
-        pub mod #mod_identifier{
+        mod #mod_identifier{
             use serde::{Serialize, Deserialize};
             use serde_json::{Map, Value};
 
@@ -605,13 +617,14 @@ fn generate_structure(
 
             #[derive(Serialize, Deserialize, Debug)]
             #doc
-            pub struct #name{
+            pub struct #type_identifier{
                 #(#property_tokens),*
             }
 
             #(#default_declarations)*
 
         }
+        pub use #mod_identifier::#type_identifier;
     }
 }
 
@@ -620,20 +633,8 @@ fn generate_rust(
     open_types: &mut Vec<SchemaUri>,
         closed_types: &HashSet<SchemaUri>,
     ) -> TokenStream {
-    let metadata = schema.schema.metadata.as_ref().unwrap();
-
-    let mod_identifier = generate_module_identifier(schema.schema_store, schema.uri.as_ref().unwrap());
-    let comment = metadata.description.as_ref();
-    let name = generate_struct_identifier(schema.schema_store, schema.uri.as_ref().unwrap());
-
-    generate_structure(
-        &mod_identifier,
-        open_types,
-        closed_types,
-        &name,
-        comment,
-        schema,
-    )
+    let object_type= read_typed_object(schema, open_types, closed_types);
+    generate_structure(&object_type, schema.schema_store, open_types, closed_types)
 }
 
 
@@ -704,16 +705,17 @@ fn load_extensions(
             let mut open_types = Vec::new();
             let mut closed_types = HashSet::new();
 
-            extension_module.push(generate_structure(
-                &base_object_module_ident,
-                &mut open_types,
-                &closed_types,
-                &Ident::new("Extension", Span::call_site()),
-                extension_doc.as_ref(),
-                &schema,
-            ));
+            let mut object_type = read_typed_object(&schema, &mut open_types, &closed_types);
+            object_type.name = String::from("extension");
 
-            while !open_types.is_empty() {
+            let structure = generate_structure(&object_type, schema.schema_store, &mut open_types, &closed_types);
+            extension_module.push(quote!{
+               pub mod #base_object_module_ident{
+                    #structure
+                }
+            });
+
+            /*while !open_types.is_empty() {
                 let uri= open_types.pop().unwrap();
                 closed_types.insert(uri.clone());
                 if !extension_schema_store.is_local_uri(&uri){
@@ -726,7 +728,7 @@ fn load_extensions(
                     &mut open_types,
                     &closed_types,
                 ));
-            }
+            }*/
         }
 
         let output = File::create(format!("{generated_path}\\{extension_module_name}.rs")).unwrap();
