@@ -1,4 +1,37 @@
 #![allow(clippy::all, unused_imports)]
+pub mod gltf {
+    mod extension {
+        use serde::{Serialize, Deserialize};
+        use serde_json::{Map, Value};
+        #[derive(Serialize, Deserialize, Debug)]
+        ///glTF Extension that defines metadata for use with STK (Systems Tool Kit).
+        pub struct Extension {
+            #[serde(default)]
+            ///JSON object with extension-specific objects.
+            pub extensions: Option<Map<String, Value>>,
+            #[serde(default)]
+            ///Application-specific data.
+            pub extras: Option<serde_json::Value>,
+            #[serde(rename = "solarPanelGroups")]
+            #[serde(default)]
+            ///An array of solar panel groups.
+            pub solar_panel_groups: Vec<
+                crate::generated::agi_stk_metadata::SolarPanelGroup,
+            >,
+        }
+        impl crate::GltfObject for Extension {
+            fn extensions(&self) -> &Option<Map<String, Value>> {
+                &self.extensions
+            }
+        }
+    }
+    pub use extension::Extension;
+    impl crate::GltfExtension for Extension {
+        fn extension_name() -> &'static str {
+            "AGI_stk_metadata"
+        }
+    }
+}
 pub mod node {
     mod extension {
         use serde::{Serialize, Deserialize};
@@ -20,39 +53,6 @@ pub mod node {
             #[serde(default)]
             ///The name of a Solar Panel Group that includes this node.
             pub solar_panel_group_name: Option<String>,
-        }
-        impl crate::GltfObject for Extension {
-            fn extensions(&self) -> &Option<Map<String, Value>> {
-                &self.extensions
-            }
-        }
-    }
-    pub use extension::Extension;
-    impl crate::GltfExtension for Extension {
-        fn extension_name() -> &'static str {
-            "AGI_stk_metadata"
-        }
-    }
-}
-pub mod gltf {
-    mod extension {
-        use serde::{Serialize, Deserialize};
-        use serde_json::{Map, Value};
-        #[derive(Serialize, Deserialize, Debug)]
-        ///glTF Extension that defines metadata for use with STK (Systems Tool Kit).
-        pub struct Extension {
-            #[serde(default)]
-            ///JSON object with extension-specific objects.
-            pub extensions: Option<Map<String, Value>>,
-            #[serde(default)]
-            ///Application-specific data.
-            pub extras: Option<serde_json::Value>,
-            #[serde(rename = "solarPanelGroups")]
-            #[serde(default)]
-            ///An array of solar panel groups.
-            pub solar_panel_groups: Vec<
-                crate::generated::agi_stk_metadata::SolarPanelGroup,
-            >,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {

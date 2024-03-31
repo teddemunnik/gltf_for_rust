@@ -1,5 +1,5 @@
 #![allow(clippy::all, unused_imports)]
-pub mod scene {
+pub mod gltf {
     mod extension {
         use serde::{Serialize, Deserialize};
         use serde_json::{Map, Value};
@@ -11,8 +11,7 @@ pub mod scene {
             #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
-            ///The id of the light referenced by this scene.
-            pub light: i64,
+            pub lights: Vec<crate::generated::ext_lights_image_based::Light>,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {
@@ -27,7 +26,7 @@ pub mod scene {
         }
     }
 }
-pub mod gltf {
+pub mod scene {
     mod extension {
         use serde::{Serialize, Deserialize};
         use serde_json::{Map, Value};
@@ -39,7 +38,8 @@ pub mod gltf {
             #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
-            pub lights: Vec<crate::generated::ext_lights_image_based::Light>,
+            ///The id of the light referenced by this scene.
+            pub light: i64,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {
