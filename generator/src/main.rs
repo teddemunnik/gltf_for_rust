@@ -470,7 +470,7 @@ fn generate_struct_identifier(store: &SchemaStore, uri: &SchemaUri) -> Ident {
 
 fn generate_property_identifier(name: &str) -> Ident {
     Ident::new(
-        &name.to_case(Case::Snake).replace("type", "ty"),
+        &name.to_case(Case::Snake).replace("type", "ty").replace("@", ""),
         Span::call_site(),
     )
 }
@@ -605,7 +605,7 @@ fn write_property(
         #rename_declaration
         #default_declaration
         #docstring
-        #property_ident: #rust_type
+        pub #property_ident: #rust_type
     }
 }
 
@@ -652,6 +652,21 @@ fn generate_structure(name: &str, object_prototype: &ObjectPrototype, schema_sto
     let embedded_types = &type_writer.embedded_types;
     let default_declarations = &type_writer.default_declarations;
 
+    // Trait implementation if the object supports extensions
+    let gltf_object_trait = if object_prototype.properties.contains_key("extensions"){
+        Some(quote!{
+            impl crate::GltfObject for #type_identifier{
+                fn extensions(&self) -> &Option<Map<String, Value>>{
+                    &self.extensions
+                }
+            }
+        })
+    }
+    else{
+        None
+    };
+
+
     quote! {
         mod #mod_identifier{
             use serde::{Serialize, Deserialize};
@@ -665,10 +680,13 @@ fn generate_structure(name: &str, object_prototype: &ObjectPrototype, schema_sto
                 #(#property_tokens),*
             }
 
+            #gltf_object_trait
+
             #(#default_declarations)*
 
         }
         pub use #mod_identifier::#type_identifier;
+
     }
 }
 
@@ -717,6 +735,9 @@ fn load_extensions(
         extension_schema_store.load();
 
         let mut extension_module = Vec::new();
+        let mut open_types = Vec::new();
+        let mut closed_types = HashSet::new();
+
 
         for (name, schema) in extension_schema_store.schemas.iter() {
             // If a schema ends with {Prefix}.ExtensionName.schema.json it represents the extension object with the extension name on that object
@@ -749,9 +770,6 @@ fn load_extensions(
 
             let schema = extension_schema_store.make_context(&name.as_str().into());
 
-            let mut open_types = Vec::new();
-            let mut closed_types = HashSet::new();
-
             let comment = schema.schema.metadata.as_ref().and_then(|metadata| metadata.description.clone());
             let mut properties = HashMap::new();
             recursive_read_properties(&mut properties, &schema, &mut open_types, &closed_types);
@@ -764,19 +782,25 @@ fn load_extensions(
             extension_module.push(quote! {
                pub mod #base_object_module_ident{
                     #structure
+
+                    impl crate::GltfExtension for Extension{
+                        fn extension_name() -> &'static str{
+                            #extension_name
+                        }
+                    }
                 }
             });
+        }
 
-            while !open_types.is_empty() {
-                let uri = open_types.pop().unwrap();
-                closed_types.insert(uri.clone());
-                if !extension_schema_store.is_local_uri(&uri) {
-                    continue;
-                }
-
-                let schema = extension_schema_store.make_context(&uri);
-                extension_module.push(generate_rust(&schema, &mut open_types, &closed_types));
+        while !open_types.is_empty() {
+            let uri = open_types.pop().unwrap();
+            closed_types.insert(uri.clone());
+            if !extension_schema_store.is_local_uri(&uri) {
+                continue;
             }
+
+            let schema = extension_schema_store.make_context(&uri);
+            extension_module.push(generate_rust(&schema, &mut open_types, &closed_types));
         }
 
         let output = File::create(format!("{generated_path}\\{extension_module_name}.rs")).unwrap();
