@@ -443,7 +443,7 @@ fn generate_property_identifier(name: &str) -> Ident {
 
 /// Writes a rust type into a unique module with helper functions and type surrounding it
 struct RustTypeWriter{
-    embedded_enums: Vec<TokenStream>,
+    embedded_types: Vec<TokenStream>,
     default_declarations: Vec<TokenStream>,
 }
 
@@ -451,7 +451,7 @@ impl RustTypeWriter {
     fn new() -> Self
     {
         Self {
-            embedded_enums: Vec::new(),
+            embedded_types: Vec::new(),
             default_declarations: Vec::new(),
         }
     }
@@ -506,7 +506,7 @@ fn write_property(
             .default
             .as_ref()
             .map(|_| quote! { #[derive(Default)] });
-        writer.embedded_enums.push(quote! {
+        writer.embedded_types.push(quote! {
             #[derive(Serialize, Deserialize, Debug)]
             #default_declaration
             enum #rusty_enum_name{
@@ -597,7 +597,7 @@ fn generate_structure(
     }
 
     let doc = object_type.comment.as_ref().map(|comment| quote!{ #[doc=#comment]});
-    let embedded_enums = &type_writer.embedded_enums;
+    let embedded_types= &type_writer.embedded_types;
     let default_declarations = &type_writer.default_declarations;
 
     quote! {
@@ -605,7 +605,7 @@ fn generate_structure(
             use serde::{Serialize, Deserialize};
             use serde_json::{Map, Value};
 
-            #(#embedded_enums)*
+            #(#embedded_types)*
 
             #[derive(Serialize, Deserialize, Debug)]
             #doc
