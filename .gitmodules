@@ -4,3 +4,5 @@
 [submodule "vendor/gltf_sample_assets"]
 	path = vendor/gltf_sample_assets
 	url = https://github.com/KhronosGroup/glTF-Sample-Assets
+[submodule "gltf"]
+	branch = main
