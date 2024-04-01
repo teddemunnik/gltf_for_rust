@@ -84,7 +84,7 @@ fn handle_field(
     schema: &SchemaContext,
     open_types: &mut Vec<SchemaUri>,
     closed_types: &HashSet<SchemaUri>,
-) -> Result<Type, Box<dyn Error>> {
+) -> anyhow::Result<Type>{
     // Extensible string enum
     if let Some(enumeration) = try_match_string_enum(schema) {
         return Ok(Type::Enum(enumeration));
@@ -186,7 +186,7 @@ fn handle_object_type(
     schema: &SchemaContext,
     open_types: &mut Vec<SchemaUri>,
     closed_types: &HashSet<SchemaUri>,
-) -> Result<Option<Type>, Box<dyn Error>> {
+) -> anyhow::Result<Option<Type>>{
     // An object with no properties, but only additionalProperties, as a typed map
     let object_validation = schema.schema.object.as_ref().unwrap();
 
@@ -214,18 +214,15 @@ fn handle_object_type(
         comment,
     }}))
 }
-
 fn handle_type_from_instance_type(
     schema: &SchemaContext,
     open_types: &mut Vec<SchemaUri>,
     closed_types: &HashSet<SchemaUri>,
-) -> Result<Option<Type>, Box<dyn Error>> {
+) -> anyhow::Result<Option<Type>>{
     // Try to match based on an instance type if one exists
     match &schema.schema.instance_type {
         Some(SingleOrVec::Single(a)) => match **a {
-            InstanceType::Null => Err(Box::new(MyError::UnhandledInstanceType(
-                schema.schema.instance_type.clone(),
-            )) as Box<dyn Error>),
+            InstanceType::Null => return Err(anyhow::anyhow!("Unhandled instance type {:?}", &schema.schema.instance_type)),
             InstanceType::Boolean => Ok(Some(Type::Boolean)),
             InstanceType::Object => handle_object_type(schema, open_types, closed_types),
             InstanceType::Array => Ok(Some(handle_array(schema, open_types, closed_types)?)),
@@ -241,7 +238,7 @@ fn handle_type(
     schema: &SchemaContext,
     open_types: &mut Vec<SchemaUri>,
     closed_types: &HashSet<SchemaUri>,
-) -> Result<Type, Box<dyn Error>> {
+) -> anyhow::Result<Type>{
     if let Some(ty) = handle_type_from_instance_type(schema, open_types, closed_types)? {
         return Ok(ty);
     }
@@ -265,15 +262,15 @@ fn handle_array(
     schema: &SchemaContext,
     open_types: &mut Vec<SchemaUri>,
     closed_types: &HashSet<SchemaUri>,
-) -> Result<Type, Box<dyn Error>> {
+) -> anyhow::Result<Type>{
     let array = schema.schema.array.as_ref().unwrap();
 
     let single_item_type = match array.items.as_ref() {
         Some(SingleOrVec::Single(ty)) => match ty.as_ref() {
             Schema::Object(object) => object,
-            _ => return Err(Box::new(MyError::UnhandledArrayItemType(array.items.clone()))),
+            _ => anyhow::bail!("Unhandled array item type {:?}", &array.items),
         },
-        _ => return Err(Box::new(MyError::UnhandledArrayItemType(array.items.clone()))),
+        _ => anyhow::bail!("Unhandled array item type {:?}", &array.items),
     };
 
     let single_item_type = schema.resolve(single_item_type);
