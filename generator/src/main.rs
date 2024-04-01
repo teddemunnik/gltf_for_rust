@@ -16,6 +16,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::vec::Vec;
 use std::{fs, fs::File, io::BufWriter};
+use anyhow::Context;
 use thiserror::Error;
 use crate::naming::{generate_enum_type_identifier, generate_option_identifier, generate_property_identifier};
 
@@ -418,7 +419,7 @@ impl PropertyListBuilder {
 
             let property = self.find_or_add(name);
             if let Type::Any = property.ty {
-                property.ty = handle_field(&field_schema, open_types, closed_types).unwrap()
+                property.ty = handle_field(&field_schema, open_types, closed_types).with_context(|| format!("failed to deduce field type for property \"{name}\"")).unwrap();
             }
 
             schedule_types(open_types, closed_types, &property.ty);
