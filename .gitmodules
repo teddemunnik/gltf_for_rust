@@ -1,8 +1,7 @@
-[submodule "vendor/gltf"]
+[submodule "gltf"]
 	path = vendor/gltf
-	url = https://github.com/KhronosGroup/glTF
-[submodule "vendor/gltf_sample_assets"]
+	url = https://github.com/teddemunnik/glTF_Specification
+	branch = main-patched
+[submodule "gltf_sample_assets"]
 	path = vendor/gltf_sample_assets
 	url = https://github.com/KhronosGroup/glTF-Sample-Assets
-[submodule "gltf"]
-	branch = main
