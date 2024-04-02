@@ -58,6 +58,15 @@ mod light {
     use serde::{Serialize, Deserialize};
     use serde_json::{Map, Value};
     #[derive(Serialize, Deserialize, Debug)]
+    pub enum Type {
+        #[serde(rename = "directional")]
+        Directional,
+        #[serde(rename = "point")]
+        Point,
+        #[serde(rename = "spot")]
+        Spot,
+    }
+    #[derive(Serialize, Deserialize, Debug)]
     ///A directional, point, or spot light.
     pub struct Light {
         #[serde(default)]
@@ -82,7 +91,7 @@ mod light {
         pub spot: Option<crate::generated::khr_lights_punctual::LightSpot>,
         #[serde(rename = "type")]
         ///Specifies the light type.
-        pub ty: String,
+        pub ty: Type,
     }
     impl crate::GltfObject for Light {
         fn extensions(&self) -> &Option<Map<String, Value>> {
