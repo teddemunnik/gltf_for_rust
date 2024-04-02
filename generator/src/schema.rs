@@ -2,6 +2,7 @@ use crate::MyError;
 use schemars::schema::{RootSchema, Schema, SchemaObject};
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
+use std::fmt::Formatter;
 use std::fs::{read_dir, File};
 use std::io::{BufReader, ErrorKind};
 use std::path::{Path, PathBuf};
@@ -10,6 +11,18 @@ use std::path::{Path, PathBuf};
 pub struct SchemaUri {
     pub path: Option<String>,
     pub fragment: Option<String>,
+}
+
+impl std::fmt::Display for SchemaUri{
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match (&self.path, &self.fragment){
+            (Some(path), None) => write!(f, "{}", &path)?,
+            (None, Some(fragment)) => write!(f, "#{}", &fragment)?,
+            (Some(path), Some(fragment)) => write!(f, "{}#{}", &path, &fragment)?,
+            _ => (),
+        }
+        Ok(())
+    }
 }
 
 impl From<&str> for SchemaUri {

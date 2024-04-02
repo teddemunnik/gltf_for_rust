@@ -207,7 +207,7 @@ fn handle_object_type(
         .as_ref()
         .and_then(|metadata| metadata.description.clone());
     let mut properties = PropertyListBuilder::new();
-    properties.recursive_read_properties(&schema, open_types, closed_types);
+    properties.recursive_read_properties(&schema, open_types, closed_types).context("Failed to read properties for embedded object")?;
 
     let name = schema.uri.as_ref().and_then(|uri| naming::get_canonical_name(schema));
     Ok(Some(Type::EmbeddedObject{name, prototype: ObjectPrototype {
@@ -395,7 +395,7 @@ impl PropertyListBuilder {
         schema: &SchemaContext,
         open_types: &mut Vec<SchemaUri>,
         closed_types: &HashSet<SchemaUri>,
-    ) {
+    ) -> anyhow::Result<()>{
         // First read properties from 'base' schemas
         let base_schema = schema
             .schema
@@ -405,7 +405,7 @@ impl PropertyListBuilder {
             .and_then(|all_of| all_of.first());
         if let Some(Schema::Object(base)) = base_schema {
             let base = schema.resolve(base);
-            self.recursive_read_properties(&base, open_types, closed_types);
+            self.recursive_read_properties(&base, open_types, closed_types)?;
         }
 
         // Then add our own properties
@@ -419,7 +419,7 @@ impl PropertyListBuilder {
 
             let property = self.find_or_add(name);
             if let Type::Any = property.ty {
-                property.ty = handle_field(&field_schema, open_types, closed_types).with_context(|| format!("failed to deduce field type for property \"{name}\"")).unwrap();
+                property.ty = handle_field(&field_schema, open_types, closed_types).with_context(|| format!("failed to deduce field type for property \"{name}\""))?;
             }
 
             schedule_types(open_types, closed_types, &property.ty);
@@ -444,6 +444,7 @@ impl PropertyListBuilder {
                 property.optional = false;
             }
         }
+        Ok(())
     }
 }
 
@@ -645,7 +646,7 @@ fn read_typed_object(
         .as_ref()
         .and_then(|metadata| metadata.description.clone());
     let mut properties = PropertyListBuilder::new();
-    properties.recursive_read_properties(schema, open_list, closed_list);
+    properties.recursive_read_properties(schema, open_list, closed_list).with_context(|| format!("Failed to read properties for schema {}", schema.uri.as_ref().unwrap())).unwrap();
     ObjectType {
         name,
         prototype: ObjectPrototype {
@@ -762,7 +763,7 @@ fn load_extensions(
 
         let mut extension_schema_store =
             SchemaStore::new_extension(&schemas_path, specification_schema, extension_name.clone());
-        extension_schema_store.load();
+        extension_schema_store.load().unwrap();
 
         let mut extension_module = Vec::new();
         let mut open_types = Vec::new();
@@ -799,7 +800,7 @@ fn load_extensions(
                 .as_ref()
                 .and_then(|metadata| metadata.description.clone());
             let mut properties = PropertyListBuilder::new();
-            properties.recursive_read_properties(&schema, &mut open_types, &closed_types);
+            properties.recursive_read_properties(&schema, &mut open_types, &closed_types).with_context(|| format!("Failed to read properties for extension {extension_name} on base object {base_object_name}")).unwrap();
             let prototype = ObjectPrototype {
                 properties: properties.properties,
                 comment,

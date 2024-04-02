@@ -6,6 +6,7 @@ mod generated;
 
 #[cfg(test)]
 mod test;
+mod import;
 
 #[non_exhaustive]
 #[derive(Error, Debug)]
