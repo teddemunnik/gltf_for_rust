@@ -8,14 +8,7 @@ use crate::{
     ArrayType, Enum, FixedArrayType, naming,
     ObjectPrototype, PropertyListBuilder, Type,
 };
-use anyhow::Context;
-use std::collections::HashSet;
-
-use schemars::schema::{InstanceType, Schema, SingleOrVec};
-use serde_json::Value;
-
 use crate::schema::{SchemaContext, SchemaUri};
-use crate::{naming, ArrayType, Enum, FixedArrayType, ObjectPrototype, PropertyListBuilder, Type};
 
 pub fn handle_field(
     schema: &SchemaContext,
