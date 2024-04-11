@@ -1,32 +1,33 @@
 use std::collections::HashSet;
 
 use anyhow::Context;
-use schemars::schema::{InstanceType, Schema, SingleOrVec};
+use itertools::Itertools;
+use serde::de::{EnumAccess, SeqAccess, Visitor};
+use serde::Deserializer;
 use serde_json::Value;
 
-use crate::{
-    ArrayType, Enum, FixedArrayType, naming,
-    ObjectPrototype, PropertyListBuilder, Type,
-};
-use crate::schema::{SchemaContext, SchemaUri};
+use crate::{ArrayType, Enum, FixedArrayType, ObjectPrototype, PropertyListBuilder, Type};
+use crate::schema2::{InstanceType, Schema, SchemaContext};
+use crate::schema_uri::SchemaUri;
 
 pub fn handle_field(
-    schema: &SchemaContext,
+    context: &SchemaContext,
+    schema: &Schema,
     open_types: &mut Vec<SchemaUri>,
     closed_types: &HashSet<SchemaUri>,
 ) -> anyhow::Result<Type> {
     // Extensible string enum
-    if let Some(enumeration) = try_match_string_enum(schema) {
+    if let Some(enumeration) = try_match_string_enum(context, schema) {
         return Ok(Type::Enum(enumeration));
     }
 
     // Extensible int enum
-    if try_match_int_enum(schema).is_some() {
+    if try_match_int_enum(context, schema).is_some() {
         return Ok(Type::Integer);
     }
 
     // Specific string enum
-    if let Some(enumeration) = schema.schema.enum_values.as_ref() {
+    if let Some(enumeration) = schema.enum_values() {
         return Ok(Type::Enum(Enum {
             options: enumeration
                 .iter()
@@ -35,28 +36,13 @@ pub fn handle_field(
         }));
     }
 
-    handle_type(schema, open_types, closed_types)
+    handle_type(context, schema, open_types, closed_types)
 }
 
-fn try_match_string_enum(schema: &SchemaContext) -> Option<Enum> {
-    let any_of = match schema
-        .schema
-        .subschemas
-        .as_ref()
-        .and_then(|sub_schema| sub_schema.any_of.as_ref())
-    {
-        Some(any_of) => any_of,
-        _ => return None,
-    };
-
+fn try_match_string_enum(context: &SchemaContext, schema: &Schema) -> Option<Enum> {
     let mut options = Vec::new();
-    for option in any_of {
-        let option = match option {
-            Schema::Object(object) => object,
-            _ => return None,
-        };
-
-        let is_string_constant = match option.const_value.as_ref() {
+    for (context, option) in schema.any_of(context) {
+        let is_string_constant = match option.const_value() {
             Some(Value::String(option)) => {
                 options.push(option.clone());
                 true
@@ -64,38 +50,23 @@ fn try_match_string_enum(schema: &SchemaContext) -> Option<Enum> {
             _ => false,
         };
 
-        let is_string = match option.instance_type.as_ref() {
-            Some(SingleOrVec::Single(single)) => matches!(single.as_ref(), InstanceType::String),
-            _ => false,
-        };
-
+        let is_string = option.instance_type().is_only(&InstanceType::String);
         if !is_string && !is_string_constant {
             return None;
         }
     }
 
+    if options.is_empty() {
+        return None;
+    }
+
     Some(Enum { options })
 }
 
-fn try_match_int_enum(schema: &SchemaContext) -> Option<()> {
-    let any_of = match schema
-        .schema
-        .subschemas
-        .as_ref()
-        .and_then(|sub_schema| sub_schema.any_of.as_ref())
-    {
-        Some(any_of) => any_of,
-        _ => return None,
-    };
-
+fn try_match_int_enum(context: &SchemaContext, schema: &Schema) -> Option<()> {
     let mut options = Vec::new();
-    for option in any_of {
-        let option = match option {
-            Schema::Object(object) => object,
-            _ => return None,
-        };
-
-        let is_number_constant = match option.const_value.as_ref() {
+    for (context, option) in schema.any_of(context) {
+        let is_number_constant = match option.const_value() {
             Some(Value::Number(option)) => {
                 options.push(option.clone());
                 true
@@ -103,53 +74,42 @@ fn try_match_int_enum(schema: &SchemaContext) -> Option<()> {
             _ => false,
         };
 
-        let is_number = match option.instance_type.as_ref() {
-            Some(SingleOrVec::Single(single)) => matches!(single.as_ref(), InstanceType::Integer),
-            _ => false,
-        };
+        let is_number = option.instance_type().is_only(&InstanceType::Number);
 
         if !is_number && !is_number_constant {
             return None;
         }
     }
 
+    if options.is_empty() {
+        return None;
+    }
+
     Some(())
 }
 
 fn handle_object_type(
-    schema: &SchemaContext,
+    context: &SchemaContext,
+    schema: &Schema,
     open_types: &mut Vec<SchemaUri>,
     closed_types: &HashSet<SchemaUri>,
 ) -> anyhow::Result<Option<Type>> {
-    // An object with no properties, but only additionalProperties, as a typed map
-    let object_validation = schema.schema.object.as_ref().unwrap();
-
-    if object_validation.additional_properties.as_ref().is_some()
-        && schema.schema.object.as_ref().unwrap().properties.is_empty()
-    {
+    if schema.additional_properties(context).is_some() && schema.properties(context).count() == 0 {
         return Ok(Some(Type::MapOfObjects));
     }
 
-    if schema.is_uri_root {
-        let uri = schema.uri.as_ref().unwrap();
-        return Ok(Some(Type::TypedObject(uri.clone())));
+    if context.is_schema_root() {
+        return Ok(Some(Type::TypedObject(SchemaUri { base_path: String::new(), relative_path: String::new(), instance_path: Vec::new() }))); // TODO
     }
 
     // Embedded object
-    let comment = schema
-        .schema
-        .metadata
-        .as_ref()
-        .and_then(|metadata| metadata.description.clone());
+    let comment = schema.description().map(|desc| desc.to_string());
     let mut properties = PropertyListBuilder::new();
     properties
-        .recursive_read_properties(&schema, open_types, closed_types)
+        .recursive_read_properties(&context, schema, open_types, closed_types)
         .context("Failed to read properties for embedded object")?;
 
-    let name = schema
-        .uri
-        .as_ref()
-        .and_then(|uri| naming::get_canonical_name(schema));
+    let name = None; // TODO;
     Ok(Some(Type::EmbeddedObject {
         name,
         prototype: ObjectPrototype {
@@ -158,48 +118,48 @@ fn handle_object_type(
         },
     }))
 }
+
 fn handle_type_from_instance_type(
-    schema: &SchemaContext,
+    context: &SchemaContext,
+    schema: &Schema,
     open_types: &mut Vec<SchemaUri>,
     closed_types: &HashSet<SchemaUri>,
 ) -> anyhow::Result<Option<Type>> {
     // Try to match based on an instance type if one exists
-    match &schema.schema.instance_type {
-        Some(SingleOrVec::Single(a)) => match **a {
-            InstanceType::Null => {
-                return Err(anyhow::anyhow!(
-                    "Unhandled instance type {:?}",
-                    &schema.schema.instance_type
-                ))
-            }
-            InstanceType::Boolean => Ok(Some(Type::Boolean)),
-            InstanceType::Object => handle_object_type(schema, open_types, closed_types),
-            InstanceType::Array => Ok(Some(handle_array(schema, open_types, closed_types)?)),
-            InstanceType::Number => Ok(Some(Type::Number)),
-            InstanceType::String => Ok(Some(Type::String)),
-            InstanceType::Integer => Ok(Some(Type::Integer)),
-        },
-        _ => Ok(None),
+    let single_instance_type = match schema.instance_type().single() {
+        Some(ty) => ty,
+        None => return Ok(None),
+    };
+
+    match single_instance_type {
+        InstanceType::Null => anyhow::bail!("Unhandled instance type {:?}", single_instance_type),
+        InstanceType::Boolean => Ok(Some(Type::Boolean)),
+        InstanceType::Object => handle_object_type(context, schema, open_types, closed_types),
+        InstanceType::Array => Ok(Some(handle_array(
+            context,
+            schema,
+            open_types,
+            closed_types,
+        )?)),
+        InstanceType::Number => Ok(Some(Type::Number)),
+        InstanceType::String => Ok(Some(Type::String)),
+        InstanceType::Integer => Ok(Some(Type::Integer)),
     }
 }
+
 fn handle_type(
-    schema: &SchemaContext,
+    context: &SchemaContext,
+    schema: &Schema,
     open_types: &mut Vec<SchemaUri>,
     closed_types: &HashSet<SchemaUri>,
 ) -> anyhow::Result<Type> {
-    if let Some(ty) = handle_type_from_instance_type(schema, open_types, closed_types)? {
+    if let Some(ty) = handle_type_from_instance_type(context, schema, open_types, closed_types)? {
         return Ok(ty);
     }
+
     // If there is an allOf with a single entry try to match based of this instead
-    if let Some(Schema::Object(single_all_of)) = schema
-        .schema
-        .subschemas
-        .as_ref()
-        .and_then(|schema| schema.all_of.as_ref())
-        .and_then(|all_of| all_of.first())
-    {
-        let single_all_of = schema.resolve(single_all_of);
-        return handle_type(&single_all_of, open_types, closed_types);
+    if let Ok((context, schema)) = schema.all_of(context).exactly_one() {
+        return handle_type(&context, schema, open_types, closed_types);
     }
 
     // Fallback to an any
@@ -207,34 +167,29 @@ fn handle_type(
 }
 
 fn handle_array(
-    schema: &SchemaContext,
+    context: &SchemaContext,
+    schema: &Schema,
     open_types: &mut Vec<SchemaUri>,
     closed_types: &HashSet<SchemaUri>,
 ) -> anyhow::Result<Type> {
-    let array = schema.schema.array.as_ref().unwrap();
+    let (context, items) = schema.items(context).unwrap();
 
-    let single_item_type = match array.items.as_ref() {
-        Some(SingleOrVec::Single(ty)) => match ty.as_ref() {
-            Schema::Object(object) => object,
-            _ => anyhow::bail!("Unhandled array item type {:?}", &array.items),
-        },
-        _ => anyhow::bail!("Unhandled array item type {:?}", &array.items),
-    };
+    let item_type = handle_type(&context, items, open_types, closed_types)?;
 
-    let single_item_type = schema.resolve(single_item_type);
-
-    let item_type = handle_type(&single_item_type, open_types, closed_types)?;
-
-    if array.min_items.is_some() && array.min_items == array.max_items {
-        let fixed_length = array.min_items.unwrap();
+    let min_items = schema.min_items();
+    let max_items = schema.max_items();
+    if min_items.is_some() && min_items == max_items {
+        let fixed_length = min_items.unwrap();
         return Ok(Type::FixedArray(FixedArrayType {
             item: Box::new(item_type),
-            length: fixed_length,
+            length: fixed_length as u32,
         }));
     }
 
     Ok(Type::Array(ArrayType {
-        min_length: array.min_items,
+        min_length: min_items,
         item: Box::new(item_type),
     }))
 }
+
+
