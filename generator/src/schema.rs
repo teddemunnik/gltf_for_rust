@@ -1,58 +1,10 @@
-use crate::MyError;
-use schemars::schema::{RootSchema, Schema, SchemaObject};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::error::Error;
-use std::fmt::Formatter;
-use std::fs::{read_dir, File};
+use std::fs::{File, read_dir};
 use std::io::{BufReader, ErrorKind};
 use std::path::{Path, PathBuf};
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct SchemaUri {
-    pub path: Option<String>,
-    pub fragment: Option<String>,
-}
-
-impl std::fmt::Display for SchemaUri{
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match (&self.path, &self.fragment){
-            (Some(path), None) => write!(f, "{}", &path)?,
-            (None, Some(fragment)) => write!(f, "#{}", &fragment)?,
-            (Some(path), Some(fragment)) => write!(f, "{}#{}", &path, &fragment)?,
-            _ => (),
-        }
-        Ok(())
-    }
-}
-
-impl From<&str> for SchemaUri {
-    fn from(value: &str) -> Self {
-        let fragment_index = value.find('#');
-        match fragment_index {
-            Some(index) if index != 0 => SchemaUri {
-                path: Some(value[..index].to_string()),
-                fragment: Some(value[(index + 1)..].to_string()),
-            },
-            Some(index) => SchemaUri {
-                path: None,
-                fragment: Some(value[(index + 1)..].to_string()),
-            },
-            None => SchemaUri {
-                path: Some(value.to_string()),
-                fragment: None,
-            },
-        }
-    }
-}
-
-impl SchemaUri {
-    pub fn definition_name(&self) -> Option<&str> {
-        const DEFINITION_NS: &str = "/definitions/";
-        self.fragment.as_ref().and_then(|fragment| {
-            fragment.strip_prefix(DEFINITION_NS)
-        })
-    }
-}
+use crate::MyError;
 
 #[derive(Clone)]
 pub struct SchemaContext<'a> {
@@ -204,7 +156,7 @@ impl<'a> SchemaStore<'a> {
         }
 
         if let Some(root) = self.schemas.get(uri.path.as_ref().unwrap()) {
-            if uri.fragment.is_some(){
+            if uri.fragment.is_some() {
                 lookup_fragment(root, uri).map(|fragment| (self, fragment))
             } else {
                 Some((self, &root.schema))
