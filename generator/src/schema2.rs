@@ -26,28 +26,31 @@ impl RootSchema {
 
 #[derive(Debug, Clone)]
 pub struct SchemaContext {
+    meta: SchemaStoreMeta,
     uri: SchemaUri,
 }
 
 impl SchemaContext {
     pub fn with_subpath(&self, path: String) -> Self {
         let mut uri = self.uri.clone();
-        uri.instance_path.push(path);
+        //uri.instance_path.push(path);
 
         SchemaContext {
-            uri
+            meta: self.meta.clone(),
+            uri,
         }
     }
 
     pub fn uri(&self) -> &SchemaUri {
         &self.uri
     }
-    pub fn base_url(&self) -> &str {
-        &self.uri.base_path
+
+    pub fn meta(&self) -> &SchemaStoreMeta {
+        &self.meta
     }
 
     pub fn relative_url(&self) -> &str {
-        &self.uri.relative_path
+        &self.uri.path
     }
 
     pub fn is_schema_root(&self) -> bool {
@@ -55,13 +58,7 @@ impl SchemaContext {
     }
 
     pub fn definition_name(&self) -> Option<&str> {
-        if self.uri.instance_path.len() >= 2 {
-            if self.uri.instance_path[0] == "definitions" || self.uri.instance_path[0] == "$defs" {
-                return Some(&self.uri.instance_path[1]);
-            }
-        }
-
-        None
+        self.uri.definition_name()
     }
 }
 
@@ -98,6 +95,9 @@ pub struct ArrayRules {
 #[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct SchemaObject {
+    #[serde(rename = "$defs", alias = "definitions")]
+    defs: BTreeMap<String, Schema>,
+
     #[serde(flatten)]
     metadata: Metadata,
 
@@ -119,6 +119,9 @@ pub struct SchemaObject {
 
     #[serde(rename = "enum")]
     enum_values: Option<Vec<Value>>,
+
+    #[serde(rename = "$ref")]
+    reference: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -255,6 +258,13 @@ impl Schema {
             _ => None,
         }
     }
+
+    pub fn reference(&self) -> Option<&str> {
+        match self {
+            Schema::Object(object) => object.reference.as_deref(),
+            _ => None
+        }
+    }
 }
 
 pub struct SubSchemaIterator<'a> {
@@ -267,7 +277,7 @@ impl<'a> Iterator for SubSchemaIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|(index, schema)| {
             let mut context = self.context.clone();
-            context.uri.instance_path.push(index.to_string());
+            //context.uri.instance_path.push(index.to_string());
             (context, schema)
         })
     }
@@ -292,7 +302,7 @@ impl<'a> Iterator for PropertiesIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|(key, value)| {
             let mut context = self.context.clone();
-            context.uri.instance_path.push(key.clone());
+            //context.uri.instance_path.push(key.clone());
             (context, key.as_ref(), value)
         })
     }
@@ -319,9 +329,16 @@ pub enum InstanceType {
     Integer,
 }
 
+#[derive(Debug, Clone)]
+pub enum SchemaStoreMeta {
+    Core,
+    Extension(String),
+}
+
 pub struct SchemaStore {
+    meta: SchemaStoreMeta,
     folder: String,
-    map: BTreeMap<SchemaUri, RootSchema>,
+    map: BTreeMap<String, RootSchema>,
 }
 
 #[derive(Error, Debug)]
@@ -334,11 +351,12 @@ pub enum SchemaError {
 }
 
 impl SchemaStore {
-    pub fn read(folder: &str) -> Result<SchemaStore, SchemaError> {
+    pub fn read(meta: SchemaStoreMeta, folder: &str) -> Result<SchemaStore, SchemaError> {
         let dir = match read_dir(&folder) {
             Ok(dir) => dir,
             Err(e) if e.kind() == ErrorKind::NotFound => {
                 return Ok(SchemaStore {
+                    meta,
                     folder: folder.to_string(),
                     map: BTreeMap::new(),
                 });
@@ -371,16 +389,11 @@ impl SchemaStore {
                 )
             })?;
 
-            let uri = SchemaUri {
-                base_path: folder.into(),
-                relative_path: file_name.clone(),
-                instance_path: Vec::new(),
-            };
-
-            map.insert(uri, root_schema);
+            map.insert(file_name.clone(), root_schema);
         }
 
         Ok(SchemaStore {
+            meta,
             folder: folder.to_string(),
             map,
         })
@@ -394,7 +407,7 @@ impl SchemaStore {
     }
 
     pub fn is_local_uri(&self, uri: &SchemaUri) -> bool {
-        self.map.contains_key(&uri)
+        self.map.contains_key(&uri.path)
     }
 }
 
@@ -415,17 +428,40 @@ impl<'a> SchemaResolver<'a> {
         }
     }
 
-    pub fn resolve(&self, uri: &SchemaUri) -> Option<(SchemaContext, &Schema)> {
-        let context = SchemaContext { uri: uri.clone() };
-        let schema = self.order.iter().filter_map(|store| store.map.get(uri)).next();
-        schema.map(|schema| (context, &schema.schema))
+    pub fn resolve(&self, uri: &SchemaUri, context: Option<&SchemaUri>) -> Option<(SchemaContext, &Schema)> {
+        // No path part means we look up in the context
+        let schema_path: &str = if uri.path.is_empty() {
+            context.unwrap().path.as_ref()
+        } else {
+            uri.path.as_ref()
+        };
+
+        // Find the schema store containing the URI
+        let (store, schema) = match self.order.iter().map(|store| store.map.get(schema_path).map(|schema| (*store, schema))).flatten().next() {
+            Some(tuple) => tuple,
+            None => return None,
+        };
+
+        let schema = match uri.definition_name() {
+            Some(def) => match &schema.schema {
+                Schema::Object(object) => match object.defs.get(def) {
+                    Some(def) => def,
+                    _ => return None,
+                }
+                _ => return None
+            },
+            _ => &schema.schema
+        };
+
+        let context = SchemaContext { meta: store.meta.clone(), uri: uri.clone() };
+        Some((context, schema))
     }
 }
 
 
 pub struct SchemaIterator<'a> {
     store: &'a SchemaStore,
-    inner: std::collections::btree_map::Iter<'a, SchemaUri, RootSchema>,
+    inner: std::collections::btree_map::Iter<'a, String, RootSchema>,
 }
 
 impl<'a> Iterator for SchemaIterator<'a> {
@@ -433,7 +469,7 @@ impl<'a> Iterator for SchemaIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|(file, schema)| (
-            SchemaContext { uri: file.clone() },
+            SchemaContext { meta: self.store.meta.clone(), uri: SchemaUri { path: file.clone(), fragment: None } },
             &schema.schema))
     }
 }

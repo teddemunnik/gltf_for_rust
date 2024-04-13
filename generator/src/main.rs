@@ -18,7 +18,7 @@ use thiserror::Error;
 use crate::naming::{
     generate_enum_type_identifier, generate_option_identifier, generate_property_identifier,
 };
-use crate::schema2::{InstanceType, Schema, SchemaContext, SchemaResolver, SchemaStore};
+use crate::schema2::{InstanceType, Schema, SchemaContext, SchemaResolver, SchemaStore, SchemaStoreMeta};
 use crate::schema_uri::SchemaUri;
 
 mod naming;
@@ -91,16 +91,17 @@ struct ObjectType {
 }
 
 fn generate_named_type_path(resolver: &SchemaResolver, uri: &SchemaUri) -> TokenStream {
-    let (context, schema) = resolver.resolve(uri).unwrap();
+    let (context, schema) = resolver.resolve(uri, None).unwrap();
 
     let name = naming::get_canonical_name(&context, &schema).unwrap();
     let type_name = Ident::new(&name, Span::call_site());
 
-    if uri.base_path.contains("specification") {
-        quote! { crate::generated::gltf::#type_name }
-    } else {
-        // TODO...
-        quote! { crate::extension::Extension; }
+    match context.meta() {
+        SchemaStoreMeta::Core => quote! { crate::generated::gltf::#type_name },
+        SchemaStoreMeta::Extension(extension) => {
+            let ident = naming::generate_base_module_identifier(extension);
+            quote! { crate::#ident::#type_name}
+        }
     }
 }
 
@@ -192,14 +193,22 @@ impl PropertyListBuilder {
 
     fn recursive_read_properties(
         &mut self,
+        resolver: &SchemaResolver,
         context: &SchemaContext,
         schema: &Schema,
         open_types: &mut Vec<SchemaUri>,
         closed_types: &HashSet<SchemaUri>,
     ) -> anyhow::Result<()> {
+        // TODO: Ensure proper handling of compound schemas, right now we assume 'inheritance'
+
+        // Read properties from reference schema
+        if let Some((context, schema)) = schema.reference().and_then(|reference| resolver.resolve(&SchemaUri::from_str(reference), Some(context.uri()))) {
+            self.recursive_read_properties(resolver, &context, schema, open_types, closed_types)?;
+        }
+
         // First read properties from 'base' schemas
         if let Ok((context, schema)) = schema.all_of(context).exactly_one() {
-            self.recursive_read_properties(&context, schema, open_types, closed_types)?;
+            self.recursive_read_properties(resolver, &context, schema, open_types, closed_types)?;
         }
 
         // Then add our own properties
@@ -207,7 +216,7 @@ impl PropertyListBuilder {
             let property = self.find_or_add(name);
             if let Type::Any = property.ty {
                 property.ty =
-                    type_deduction::handle_field(&context, field_schema, open_types, closed_types)
+                    type_deduction::handle_field(resolver, &context, field_schema, open_types, closed_types)
                         .with_context(|| {
                             format!("failed to deduce field type for property \"{name}\"")
                         })?;
@@ -419,6 +428,7 @@ fn write_property(
 }
 
 fn read_typed_object(
+    resolver: &SchemaResolver,
     context: &SchemaContext,
     schema: &Schema,
     open_list: &mut Vec<SchemaUri>,
@@ -428,7 +438,7 @@ fn read_typed_object(
     let comment = schema.description().map(|desc| desc.to_string());
     let mut properties = PropertyListBuilder::new();
     properties
-        .recursive_read_properties(context, schema, open_list, closed_list)
+        .recursive_read_properties(resolver, context, schema, open_list, closed_list)
         .with_context(|| {
             format!(
                 "Failed to read properties for schema {}",
@@ -513,7 +523,7 @@ fn generate_rust(
     open_types: &mut Vec<SchemaUri>,
     closed_types: &HashSet<SchemaUri>,
 ) -> anyhow::Result<TokenStream> {
-    let object_type = read_typed_object(context, schema, open_types, closed_types);
+    let object_type = read_typed_object(resolver, context, schema, open_types, closed_types);
     generate_structure(&object_type.name, &object_type.prototype, resolver).with_context(|| format!("Failed to generate rust for schema {}", context.uri()))
 }
 
@@ -548,7 +558,7 @@ fn load_extensions(
         schemas_path.push("schema");
         let extension_schema_suffix = format!("{}.schema.json", &extension_name);
 
-        let mut extension_schema_store = SchemaStore::read(&schemas_path.to_string_lossy()).unwrap();
+        let mut extension_schema_store = SchemaStore::read(SchemaStoreMeta::Extension(extension_name.clone()), &schemas_path.to_string_lossy()).unwrap();
         let resolver = SchemaResolver::extension(&specification_schema, &extension_schema_store);
 
         let mut extension_module = Vec::new();
@@ -559,7 +569,7 @@ fn load_extensions(
             // If a schema ends with {Prefix}.ExtensionName.schema.json it represents the extension object with the extension name on that object
             let uri = context.uri();
 
-            let base_object_name = match uri.relative_path.strip_suffix(&extension_schema_suffix) {
+            let base_object_name = match uri.path.strip_suffix(&extension_schema_suffix) {
                 Some(base_object_name) => base_object_name,
                 None => continue,
             };
@@ -580,11 +590,9 @@ fn load_extensions(
                 "The {extension_name} extension for {base_object_name}"
             ));
 
-            println!("{:#?}", schema);
-
             let comment = schema.description().map(|desc| desc.to_string());
             let mut properties = PropertyListBuilder::new();
-            properties.recursive_read_properties(&context, schema, &mut open_types, &closed_types).with_context(|| format!("Failed to read properties for extension {extension_name} on base object {base_object_name}")).unwrap();
+            properties.recursive_read_properties(&resolver, &context, schema, &mut open_types, &closed_types).with_context(|| format!("Failed to read properties for extension {extension_name} on base object {base_object_name}")).unwrap();
             let prototype = ObjectPrototype {
                 properties: properties.properties,
                 comment,
@@ -610,7 +618,7 @@ fn load_extensions(
                 continue;
             }
 
-            let (context, schema) = resolver.resolve(&uri).unwrap();
+            let (context, schema) = resolver.resolve(&uri, None).unwrap();
 
             extension_module.push(generate_rust(&resolver, &context, &schema, &mut open_types, &closed_types)?);
         }
@@ -625,7 +633,6 @@ fn load_extensions(
         };
 
         let rust_file: syn::File = syn::parse2(rust).unwrap();
-
         write!(writer, "{}", prettyplease::unparse(&rust_file)).unwrap();
 
         generated_manifest
@@ -700,20 +707,20 @@ fn main() {
     const SPECIFICATION_FOLDER: &str = "vendor\\gltf\\specification\\2.0\\schema";
 
     // Create the core specification schema store
-    let mut specification_schema_store = SchemaStore::read(SPECIFICATION_FOLDER).unwrap();
+    let mut specification_schema_store = SchemaStore::read(SchemaStoreMeta::Core, SPECIFICATION_FOLDER).unwrap();
 
     // Collect root types:
     let mut closed_types = HashSet::new();
     let mut open_types = Vec::new();
 
     let mut types = Vec::new();
-    open_types.push(SchemaUri { base_path: SPECIFICATION_FOLDER.into(), relative_path: "glTF.schema.json".into(), instance_path: Vec::new() });
+    open_types.push(SchemaUri::from_str("glTF.schema.json"));
 
     let specification_resolver = SchemaResolver::specification(&specification_schema_store);
 
     while let Some(uri) = open_types.pop() {
         closed_types.insert(uri.clone());
-        let (context, schema) = specification_resolver.resolve(&uri).unwrap();
+        let (context, schema) = specification_resolver.resolve(&uri, None).unwrap();
         types.push(generate_rust(&specification_resolver, &context, &schema, &mut open_types, &closed_types).unwrap());
     }
 

@@ -7,10 +7,11 @@ use serde::Deserializer;
 use serde_json::Value;
 
 use crate::{ArrayType, Enum, FixedArrayType, ObjectPrototype, PropertyListBuilder, Type};
-use crate::schema2::{InstanceType, Schema, SchemaContext};
+use crate::schema2::{InstanceType, Schema, SchemaContext, SchemaResolver};
 use crate::schema_uri::SchemaUri;
 
 pub fn handle_field(
+    resolver: &SchemaResolver,
     context: &SchemaContext,
     schema: &Schema,
     open_types: &mut Vec<SchemaUri>,
@@ -36,7 +37,7 @@ pub fn handle_field(
         }));
     }
 
-    handle_type(context, schema, open_types, closed_types)
+    handle_type(resolver, context, schema, open_types, closed_types)
 }
 
 fn try_match_string_enum(context: &SchemaContext, schema: &Schema) -> Option<Enum> {
@@ -74,7 +75,7 @@ fn try_match_int_enum(context: &SchemaContext, schema: &Schema) -> Option<()> {
             _ => false,
         };
 
-        let is_number = option.instance_type().is_only(&InstanceType::Number);
+        let is_number = option.instance_type().is_only(&InstanceType::Integer);
 
         if !is_number && !is_number_constant {
             return None;
@@ -89,6 +90,7 @@ fn try_match_int_enum(context: &SchemaContext, schema: &Schema) -> Option<()> {
 }
 
 fn handle_object_type(
+    resolver: &SchemaResolver,
     context: &SchemaContext,
     schema: &Schema,
     open_types: &mut Vec<SchemaUri>,
@@ -99,14 +101,14 @@ fn handle_object_type(
     }
 
     if context.is_schema_root() {
-        return Ok(Some(Type::TypedObject(SchemaUri { base_path: String::new(), relative_path: String::new(), instance_path: Vec::new() }))); // TODO
+        return Ok(Some(Type::TypedObject(context.uri().clone())));
     }
 
     // Embedded object
     let comment = schema.description().map(|desc| desc.to_string());
     let mut properties = PropertyListBuilder::new();
     properties
-        .recursive_read_properties(&context, schema, open_types, closed_types)
+        .recursive_read_properties(resolver, &context, schema, open_types, closed_types)
         .context("Failed to read properties for embedded object")?;
 
     let name = None; // TODO;
@@ -120,6 +122,7 @@ fn handle_object_type(
 }
 
 fn handle_type_from_instance_type(
+    resolver: &SchemaResolver,
     context: &SchemaContext,
     schema: &Schema,
     open_types: &mut Vec<SchemaUri>,
@@ -134,8 +137,9 @@ fn handle_type_from_instance_type(
     match single_instance_type {
         InstanceType::Null => anyhow::bail!("Unhandled instance type {:?}", single_instance_type),
         InstanceType::Boolean => Ok(Some(Type::Boolean)),
-        InstanceType::Object => handle_object_type(context, schema, open_types, closed_types),
+        InstanceType::Object => handle_object_type(resolver, context, schema, open_types, closed_types),
         InstanceType::Array => Ok(Some(handle_array(
+            resolver,
             context,
             schema,
             open_types,
@@ -148,18 +152,26 @@ fn handle_type_from_instance_type(
 }
 
 fn handle_type(
+    resolver: &SchemaResolver,
     context: &SchemaContext,
     schema: &Schema,
     open_types: &mut Vec<SchemaUri>,
     closed_types: &HashSet<SchemaUri>,
 ) -> anyhow::Result<Type> {
-    if let Some(ty) = handle_type_from_instance_type(context, schema, open_types, closed_types)? {
+    if let Some(ty) = handle_type_from_instance_type(resolver, context, schema, open_types, closed_types)? {
         return Ok(ty);
     }
 
     // If there is an allOf with a single entry try to match based of this instead
     if let Ok((context, schema)) = schema.all_of(context).exactly_one() {
-        return handle_type(&context, schema, open_types, closed_types);
+        return handle_type(resolver, &context, schema, open_types, closed_types);
+    }
+
+    // Check if we deduce from a reference
+    if let Some(reference) = schema.reference() {
+        let uri = SchemaUri::from_str(reference);
+        let (context, reference) = resolver.resolve(&uri, Some(context.uri())).unwrap();
+        return handle_type(resolver, &context, reference, open_types, closed_types);
     }
 
     // Fallback to an any
@@ -167,6 +179,7 @@ fn handle_type(
 }
 
 fn handle_array(
+    resolver: &SchemaResolver,
     context: &SchemaContext,
     schema: &Schema,
     open_types: &mut Vec<SchemaUri>,
@@ -174,7 +187,7 @@ fn handle_array(
 ) -> anyhow::Result<Type> {
     let (context, items) = schema.items(context).unwrap();
 
-    let item_type = handle_type(&context, items, open_types, closed_types)?;
+    let item_type = handle_type(resolver, &context, items, open_types, closed_types)?;
 
     let min_items = schema.min_items();
     let max_items = schema.max_items();

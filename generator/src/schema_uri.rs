@@ -2,19 +2,25 @@ use std::fmt::Formatter;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct SchemaUri {
-    pub base_path: String,
-    pub relative_path: String,
-    pub instance_path: Vec<String>,
+    pub path: String,
+    pub fragment: Option<String>,
+}
+
+impl SchemaUri {
+    pub fn from_str(str: &str) -> SchemaUri {
+        let pound = str.chars().position(|c| c == '#');
+        match pound {
+            Some(index) => SchemaUri { path: String::from(&str[..index]), fragment: Some(String::from(&str[(index + 1)..])) },
+            None => SchemaUri { path: String::from(str), fragment: None }
+        }
+    }
 }
 
 impl std::fmt::Display for SchemaUri {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}/{}", &self.base_path, &self.relative_path)?;
-        if !self.instance_path.is_empty() {
-            write!(f, "#")?;
-            for instance in &self.instance_path {
-                write!(f, "/{}", instance)?;
-            }
+        write!(f, "{}", &self.path)?;
+        if let Some(fragment) = self.fragment.as_ref() {
+            write!(f, "#{}", fragment)?;
         }
 
         Ok(())
@@ -23,15 +29,17 @@ impl std::fmt::Display for SchemaUri {
 
 impl SchemaUri {
     pub fn is_schema_root(&self) -> bool {
-        self.instance_path.is_empty()
+        self.fragment.is_none()
     }
     pub fn definition_name(&self) -> Option<&str> {
-        if self.instance_path.len() >= 2 && self.instance_path[0] == "definitions"
-            || self.instance_path[0] == "$defs"
-        {
-            Some(&self.instance_path[1])
-        } else {
-            None
+        if let Some(fragment) = self.fragment.as_ref() {
+            if let Some(definition) = fragment.strip_prefix("/definitions/") {
+                return Some(definition);
+            }
+            if let Some(definition) = fragment.strip_prefix("/$defs/") {
+                return Some(definition);
+            }
         }
+        None
     }
 }

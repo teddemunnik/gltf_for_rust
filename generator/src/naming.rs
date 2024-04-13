@@ -18,7 +18,7 @@ pub fn get_canonical_name(context: &SchemaContext, schema: &Schema) -> Option<St
     // Get the schema name
     let uri = context.uri();
     if uri.is_schema_root() {
-        if let Some(no_suffix) = uri.relative_path.strip_suffix(".schema.json") {
+        if let Some(no_suffix) = uri.path.strip_suffix(".schema.json") {
             return Some(
                 no_suffix
                     .replace("glTF", "gltf")
