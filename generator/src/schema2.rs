@@ -159,6 +159,13 @@ impl Schema {
         }
     }
 
+    pub fn detailed_description(&self) -> Option<&str> {
+        match self {
+            Schema::Object(object) => object.metadata.detailed_description.as_deref(),
+            _ => None
+        }
+    }
+
     pub fn default(&self) -> Option<&Value> {
         match self {
             Schema::Object(object) => object.metadata.default.as_ref(),

@@ -192,6 +192,10 @@ impl PropertyListBuilder {
     }
 
     fn read_description<'a>(schema_resolver: &'a SchemaResolver, context: &SchemaContext, schema: &'a Schema) -> Option<&'a str> {
+        if let Some(detailed_description) = schema.detailed_description() {
+            return Some(detailed_description);
+        }
+
         if let Some(description) = schema.description() {
             return Some(description);
         }
