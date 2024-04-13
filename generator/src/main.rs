@@ -191,6 +191,18 @@ impl PropertyListBuilder {
         }
     }
 
+    fn read_description<'a>(schema_resolver: &'a SchemaResolver, context: &SchemaContext, schema: &'a Schema) -> Option<&'a str> {
+        if let Some(description) = schema.description() {
+            return Some(description);
+        }
+
+        if let Some((context, schema)) = schema.reference().and_then(|reference| schema_resolver.resolve(&SchemaUri::from_str(reference), Some(context.uri()))) {
+            return Self::read_description(schema_resolver, &context, schema);
+        }
+
+        None
+    }
+
     fn recursive_read_properties(
         &mut self,
         resolver: &SchemaResolver,
@@ -225,9 +237,7 @@ impl PropertyListBuilder {
             schedule_types(open_types, closed_types, &property.ty);
 
             if property.comment.is_none() {
-                property.comment = field_schema
-                    .description()
-                    .map(|description| description.to_string());
+                property.comment = Self::read_description(resolver, &context, field_schema).map(String::from);
             }
 
             if property.default.is_none() {
