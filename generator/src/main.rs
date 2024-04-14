@@ -687,14 +687,16 @@ fn write_root_module(generated_path: &str, generated_manifest: &GeneratedManifes
 }
 
 fn main() {
-    // Recreate the generated directory
-    let generated_path = "gltf_for_rust/src/generated";
-    ensure_empty_dir(generated_path);
-
     const SPECIFICATION_FOLDER: &str = "vendor/gltf/specification/2.0/schema";
+    const KHRONOS_EXTENSIONS_FOLDER: &str = "vendor/gltf/extensions/2.0/Khronos";
+    const VENDOR_EXTENSIONS_FOLDER: &str = "vendor/gltf/extensions/2.0/Vendor";
+    const OUTPUT_BASE: &str = "gltf_for_rust/src/generated";
+
+    // Recreate the generated directory
+    ensure_empty_dir(OUTPUT_BASE);
 
     // Create the core specification schema store
-    let mut specification_schema_store = SchemaStore::read(SchemaStoreMeta::Core, SPECIFICATION_FOLDER).unwrap();
+    let specification_schema_store = SchemaStore::read(SchemaStoreMeta::Core, SPECIFICATION_FOLDER).unwrap();
 
     // Collect root types:
     let mut closed_types = HashSet::new();
@@ -718,26 +720,24 @@ fn main() {
     };
 
     let file: syn::File = syn::parse2(rust).unwrap();
-    let output = File::create(format!("{generated_path}/gltf.rs")).unwrap();
+    let output = File::create(format!("{OUTPUT_BASE}/gltf.rs")).unwrap();
     let mut writer = BufWriter::new(output);
     write!(writer, "{}", prettyplease::unparse(&file)).unwrap();
 
     let mut generated_manifest = GeneratedManifest::new();
     load_extensions(
         &mut generated_manifest,
-        "vendor/gltf/extensions/2.0/Khronos",
-        generated_path,
+        KHRONOS_EXTENSIONS_FOLDER,
+        OUTPUT_BASE,
         &specification_schema_store,
-    )
-        .unwrap();
+    ).unwrap();
 
     load_extensions(
         &mut generated_manifest,
-        "vendor/gltf/extensions/2.0/Vendor",
-        generated_path,
+        VENDOR_EXTENSIONS_FOLDER,
+        OUTPUT_BASE,
         &specification_schema_store,
-    )
-        .unwrap();
+    ).unwrap();
 
-    write_root_module(generated_path, &generated_manifest);
+    write_root_module(OUTPUT_BASE, &generated_manifest);
 }
