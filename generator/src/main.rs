@@ -374,8 +374,7 @@ fn write_property(
                 generate_rust_type(resolver, &property.ty, &property.name)
             }
 
-        // Remove the Option for optional properties which have a default value specified.
-        (_, true) if property.default.is_none() => {
+        (_, true) => {
             let rust_type: TokenStream = generate_rust_type(resolver, &property.ty, &property.name);
             quote! { Option::<#rust_type> }
         }
@@ -385,42 +384,16 @@ fn write_property(
     let property_identifier = generate_property_identifier(&property.name);
     let property_identifier_name = property_identifier.to_string();
 
-    // For objects with an explicit default, create a default declaration
-    let explicit_default_value = property
-        .default
-        .as_ref()
-        .map(|default| generate_default_value_token(&property.ty, default, &property.name).context("failed to generate a default value")).transpose()?;
-    let default_declaration = explicit_default_value.as_ref().map(|_| {
-        Ident::new(
-            &format!("get_default_{}", &property_identifier_name),
-            Span::call_site(),
-        )
-    });
-
     if let Some(embedded_type) =
         write_embedded_type(&property.name, &property.ty, &property.default, resolver)?
     {
         writer.embedded_types.push(embedded_type);
     }
 
-    if let Some(default_declaration) = &default_declaration {
-        writer.default_declarations.push(quote! {
-            fn #default_declaration() -> #rust_type{
-                #explicit_default_value
-            }
-        });
-    }
-
-    let default_declaration = default_declaration
-        .as_ref()
-        .map(|declaration| {
-            let string = declaration.to_string();
-            quote! { #[serde(default=#string)]}
-        })
-        .or_else(|| match property.optional {
-            true => Some(quote! { #[serde(default)] }),
-            false => None,
-        });
+    let default_declaration = match property.optional {
+        true => Some(quote! { #[serde(default)]}),
+        false => None
+    };
 
     // If the property identifier is different from the one in the spec we need to add a serde
     // rename to make it match the spec.
