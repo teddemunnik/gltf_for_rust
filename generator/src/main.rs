@@ -100,7 +100,7 @@ fn generate_named_type_path(resolver: &SchemaResolver, uri: &SchemaUri) -> Token
         SchemaStoreMeta::Core => quote! { crate::generated::gltf::#type_name },
         SchemaStoreMeta::Extension(extension) => {
             let ident = naming::generate_base_module_identifier(extension);
-            quote! { crate::#ident::#type_name}
+            quote! { crate::generated::#ident::#type_name}
         }
     }
 }
