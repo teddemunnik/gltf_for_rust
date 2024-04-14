@@ -31,9 +31,16 @@ pub struct SchemaContext {
 }
 
 impl SchemaContext {
-    pub fn with_subpath(&self, path: String) -> Self {
+    pub fn with_subpath(&self, path: &str) -> Self {
         let mut uri = self.uri.clone();
-        //uri.instance_path.push(path);
+
+        match &mut uri.fragment {
+            Some(fragment) => {
+                fragment.push_str("/");
+                fragment.push_str(path);
+            }
+            None => uri.fragment = Some(String::from(path)),
+        };
 
         SchemaContext {
             meta: self.meta.clone(),
@@ -308,8 +315,7 @@ impl<'a> Iterator for PropertiesIterator<'a> {
     type Item = (SchemaContext, &'a str, &'a Schema);
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|(key, value)| {
-            let mut context = self.context.clone();
-            //context.uri.instance_path.push(key.clone());
+            let mut context = self.context.with_subpath(&format!("properties/{key}"));
             (context, key.as_ref(), value)
         })
     }
