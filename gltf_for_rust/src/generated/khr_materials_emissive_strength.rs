@@ -13,17 +13,14 @@ pub mod material {
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
             #[serde(rename = "emissiveStrength")]
-            #[serde(default = "get_default_emissive_strength")]
+            #[serde(default)]
             ///The strength adjustment to be multiplied with the material's emissive value.
-            pub emissive_strength: f64,
+            pub emissive_strength: Option<f64>,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {
                 &self.extensions
             }
-        }
-        fn get_default_emissive_strength() -> f64 {
-            1f64
         }
     }
     pub use extension::Extension;

@@ -12,15 +12,15 @@ pub mod texture_info {
             #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
-            #[serde(default = "get_default_offset")]
+            #[serde(default)]
             ///The offset of the UV coordinate origin as a factor of the texture dimensions.
-            pub offset: [f64; 2usize],
-            #[serde(default = "get_default_rotation")]
+            pub offset: Option<[f64; 2usize]>,
+            #[serde(default)]
             ///Rotate the UVs by this many radians counter-clockwise around the origin.
-            pub rotation: f64,
-            #[serde(default = "get_default_scale")]
+            pub rotation: Option<f64>,
+            #[serde(default)]
             ///The scale factor applied to the components of the UV coordinates.
-            pub scale: [f64; 2usize],
+            pub scale: Option<[f64; 2usize]>,
             #[serde(rename = "texCoord")]
             #[serde(default)]
             ///Overrides the textureInfo texCoord value if supplied, and if this extension is supported.
@@ -30,15 +30,6 @@ pub mod texture_info {
             fn extensions(&self) -> &Option<Map<String, Value>> {
                 &self.extensions
             }
-        }
-        fn get_default_offset() -> [f64; 2usize] {
-            [0f64, 0f64]
-        }
-        fn get_default_rotation() -> f64 {
-            0f64
-        }
-        fn get_default_scale() -> [f64; 2usize] {
-            [1f64, 1f64]
         }
     }
     pub use extension::Extension;

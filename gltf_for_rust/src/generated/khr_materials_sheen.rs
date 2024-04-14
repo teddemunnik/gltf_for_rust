@@ -13,17 +13,17 @@ pub mod material {
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
             #[serde(rename = "sheenColorFactor")]
-            #[serde(default = "get_default_sheen_color_factor")]
+            #[serde(default)]
             ///Color of the sheen layer (in linear space).
-            pub sheen_color_factor: [f64; 3usize],
+            pub sheen_color_factor: Option<[f64; 3usize]>,
             #[serde(rename = "sheenColorTexture")]
             #[serde(default)]
             ///The sheen color (RGB) texture. Stored in channel RGB, the sheen color is in sRGB transfer function.
             pub sheen_color_texture: Option<crate::generated::gltf::TextureInfo>,
             #[serde(rename = "sheenRoughnessFactor")]
-            #[serde(default = "get_default_sheen_roughness_factor")]
+            #[serde(default)]
             ///The sheen layer roughness of the material.
-            pub sheen_roughness_factor: f64,
+            pub sheen_roughness_factor: Option<f64>,
             #[serde(rename = "sheenRoughnessTexture")]
             #[serde(default)]
             ///The sheen roughness (Alpha) texture. Stored in alpha channel, the roughness value is in linear space.
@@ -33,12 +33,6 @@ pub mod material {
             fn extensions(&self) -> &Option<Map<String, Value>> {
                 &self.extensions
             }
-        }
-        fn get_default_sheen_color_factor() -> [f64; 3usize] {
-            [0f64, 0f64, 0f64]
-        }
-        fn get_default_sheen_roughness_factor() -> f64 {
-            0f64
         }
     }
     pub use extension::Extension;

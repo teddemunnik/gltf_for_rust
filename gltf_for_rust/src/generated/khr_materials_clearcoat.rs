@@ -13,9 +13,9 @@ pub mod material {
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
             #[serde(rename = "clearcoatFactor")]
-            #[serde(default = "get_default_clearcoat_factor")]
+            #[serde(default)]
             ///The clearcoat layer intensity (aka opacity) of the material. A value of 0.0 means the material has no clearcoat layer enabled.
-            pub clearcoat_factor: f64,
+            pub clearcoat_factor: Option<f64>,
             #[serde(rename = "clearcoatNormalTexture")]
             #[serde(default)]
             ///A tangent space normal map for the clearcoat layer.  If desired, this may be a reference to the same normal map used by the base material.  If not supplied, no normal mapping is applied to the clear coat layer.
@@ -23,9 +23,9 @@ pub mod material {
                 crate::generated::gltf::MaterialNormalTextureInfo,
             >,
             #[serde(rename = "clearcoatRoughnessFactor")]
-            #[serde(default = "get_default_clearcoat_roughness_factor")]
+            #[serde(default)]
             ///The clearcoat layer roughness of the material.
-            pub clearcoat_roughness_factor: f64,
+            pub clearcoat_roughness_factor: Option<f64>,
             #[serde(rename = "clearcoatRoughnessTexture")]
             #[serde(default)]
             ///The clearcoat layer roughness texture. These values are sampled from the G channel.  The values are linear.  Use value 1.0 if no texture is supplied.
@@ -39,12 +39,6 @@ pub mod material {
             fn extensions(&self) -> &Option<Map<String, Value>> {
                 &self.extensions
             }
-        }
-        fn get_default_clearcoat_factor() -> f64 {
-            0f64
-        }
-        fn get_default_clearcoat_roughness_factor() -> f64 {
-            0f64
         }
     }
     pub use extension::Extension;

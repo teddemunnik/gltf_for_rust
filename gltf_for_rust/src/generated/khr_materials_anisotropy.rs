@@ -13,13 +13,13 @@ pub mod material {
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
             #[serde(rename = "anisotropyRotation")]
-            #[serde(default = "get_default_anisotropy_rotation")]
+            #[serde(default)]
             ///The rotation of the anisotropy in tangent, bitangent space, measured in radians counter-clockwise from the tangent. When anisotropyTexture is present, anisotropyRotation provides additional rotation to the vectors in the texture.
-            pub anisotropy_rotation: f64,
+            pub anisotropy_rotation: Option<f64>,
             #[serde(rename = "anisotropyStrength")]
-            #[serde(default = "get_default_anisotropy_strength")]
+            #[serde(default)]
             ///The anisotropy strength. When anisotropyTexture is present, this value is multiplied by the blue channel.
-            pub anisotropy_strength: f64,
+            pub anisotropy_strength: Option<f64>,
             #[serde(rename = "anisotropyTexture")]
             #[serde(default)]
             ///The anisotropy texture. Red and green channels represent the anisotropy direction in [-1, 1] tangent, bitangent space, to be rotated by anisotropyRotation. The blue channel contains strength as [0, 1] to be multiplied by anisotropyStrength.
@@ -29,12 +29,6 @@ pub mod material {
             fn extensions(&self) -> &Option<Map<String, Value>> {
                 &self.extensions
             }
-        }
-        fn get_default_anisotropy_rotation() -> f64 {
-            0f64
-        }
-        fn get_default_anisotropy_strength() -> f64 {
-            0f64
         }
     }
     pub use extension::Extension;

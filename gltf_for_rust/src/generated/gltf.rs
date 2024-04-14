@@ -183,24 +183,18 @@ mod sampler {
         ///Minification filter.
         pub min_filter: Option<i64>,
         #[serde(rename = "wrapS")]
-        #[serde(default = "get_default_wrap_s")]
+        #[serde(default)]
         ///S (U) wrapping mode.  All valid values correspond to WebGL enums.
-        pub wrap_s: i64,
+        pub wrap_s: Option<i64>,
         #[serde(rename = "wrapT")]
-        #[serde(default = "get_default_wrap_t")]
+        #[serde(default)]
         ///T (V) wrapping mode.
-        pub wrap_t: i64,
+        pub wrap_t: Option<i64>,
     }
     impl crate::GltfObject for Sampler {
         fn extensions(&self) -> &Option<Map<String, Value>> {
             &self.extensions
         }
-    }
-    fn get_default_wrap_s() -> i64 {
-        10497i64
-    }
-    fn get_default_wrap_t() -> i64 {
-        10497i64
     }
 }
 pub use sampler::Sampler;
@@ -225,24 +219,24 @@ mod node {
         #[serde(default)]
         ///The indices of this node's children.
         pub children: Vec<i64>,
-        #[serde(default = "get_default_matrix")]
+        #[serde(default)]
         ///A floating-point 4x4 transformation matrix stored in column-major order.
-        pub matrix: [f64; 16usize],
+        pub matrix: Option<[f64; 16usize]>,
         #[serde(default)]
         ///The index of the mesh in this node.
         pub mesh: Option<i64>,
-        #[serde(default = "get_default_rotation")]
+        #[serde(default)]
         ///The node's unit quaternion rotation in the order (x, y, z, w), where w is the scalar.
-        pub rotation: [f64; 4usize],
-        #[serde(default = "get_default_scale")]
+        pub rotation: Option<[f64; 4usize]>,
+        #[serde(default)]
         ///The node's non-uniform scale, given as the scaling factors along the x, y, and z axes.
-        pub scale: [f64; 3usize],
+        pub scale: Option<[f64; 3usize]>,
         #[serde(default)]
         ///The index of the skin referenced by this node. When a skin is referenced by a node within a scene, all joints used by the skin **MUST** belong to the same scene. When defined, `mesh` **MUST** also be defined.
         pub skin: Option<i64>,
-        #[serde(default = "get_default_translation")]
+        #[serde(default)]
         ///The node's translation along the x, y, and z axes.
-        pub translation: [f64; 3usize],
+        pub translation: Option<[f64; 3usize]>,
         #[serde(default)]
         ///The weights of the instantiated morph target. The number of array elements **MUST** match the number of morph targets of the referenced mesh. When defined, `mesh` **MUST** also be defined.
         pub weights: Vec<f64>,
@@ -251,35 +245,6 @@ mod node {
         fn extensions(&self) -> &Option<Map<String, Value>> {
             &self.extensions
         }
-    }
-    fn get_default_matrix() -> [f64; 16usize] {
-        [
-            1f64,
-            0f64,
-            0f64,
-            0f64,
-            0f64,
-            1f64,
-            0f64,
-            0f64,
-            0f64,
-            0f64,
-            1f64,
-            0f64,
-            0f64,
-            0f64,
-            0f64,
-            1f64,
-        ]
-    }
-    fn get_default_rotation() -> [f64; 4usize] {
-        [0f64, 0f64, 0f64, 1f64]
-    }
-    fn get_default_scale() -> [f64; 3usize] {
-        [1f64, 1f64, 1f64]
-    }
-    fn get_default_translation() -> [f64; 3usize] {
-        [0f64, 0f64, 0f64]
     }
 }
 pub use node::Node;
@@ -331,9 +296,9 @@ mod mesh_primitive {
         #[serde(default)]
         ///The index of the material to apply to this primitive when rendering.
         pub material: Option<i64>,
-        #[serde(default = "get_default_mode")]
+        #[serde(default)]
         ///The topology type of primitives to render.
-        pub mode: i64,
+        pub mode: Option<i64>,
         #[serde(default)]
         ///An array of morph targets.
         pub targets: Vec<Map<String, Value>>,
@@ -342,9 +307,6 @@ mod mesh_primitive {
         fn extensions(&self) -> &Option<Map<String, Value>> {
             &self.extensions
         }
-    }
-    fn get_default_mode() -> i64 {
-        4i64
     }
 }
 pub use mesh_primitive::MeshPrimitive;
@@ -375,21 +337,21 @@ mod material {
         ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
         pub name: Option<String>,
         #[serde(rename = "alphaCutoff")]
-        #[serde(default = "get_default_alpha_cutoff")]
+        #[serde(default)]
         ///Specifies the cutoff threshold when in `MASK` alpha mode. If the alpha value is greater than or equal to this value then it is rendered as fully opaque, otherwise, it is rendered as fully transparent. A value greater than `1.0` will render the entire material as fully transparent. This value **MUST** be ignored for other alpha modes. When `alphaMode` is not defined, this value **MUST NOT** be defined.
-        pub alpha_cutoff: f64,
+        pub alpha_cutoff: Option<f64>,
         #[serde(rename = "alphaMode")]
-        #[serde(default = "get_default_alpha_mode")]
+        #[serde(default)]
         ///The material's alpha rendering mode enumeration specifying the interpretation of the alpha value of the base color.
-        pub alpha_mode: AlphaMode,
+        pub alpha_mode: Option<AlphaMode>,
         #[serde(rename = "doubleSided")]
-        #[serde(default = "get_default_double_sided")]
+        #[serde(default)]
         ///Specifies whether the material is double sided. When this value is false, back-face culling is enabled. When this value is true, back-face culling is disabled and double-sided lighting is enabled. The back-face **MUST** have its normals reversed before the lighting equation is evaluated.
-        pub double_sided: bool,
+        pub double_sided: Option<bool>,
         #[serde(rename = "emissiveFactor")]
-        #[serde(default = "get_default_emissive_factor")]
+        #[serde(default)]
         ///The factors for the emissive color of the material. This value defines linear multipliers for the sampled texels of the emissive texture.
-        pub emissive_factor: [f64; 3usize],
+        pub emissive_factor: Option<[f64; 3usize]>,
         #[serde(rename = "emissiveTexture")]
         #[serde(default)]
         ///The emissive texture. It controls the color and intensity of the light being emitted by the material. This texture contains RGB components encoded with the sRGB transfer function. If a fourth component (A) is present, it **MUST** be ignored. When undefined, the texture **MUST** be sampled as having `1.0` in RGB components.
@@ -416,18 +378,6 @@ mod material {
             &self.extensions
         }
     }
-    fn get_default_alpha_cutoff() -> f64 {
-        0.5f64
-    }
-    fn get_default_alpha_mode() -> AlphaMode {
-        AlphaMode::default()
-    }
-    fn get_default_double_sided() -> bool {
-        false
-    }
-    fn get_default_emissive_factor() -> [f64; 3usize] {
-        [0f64, 0f64, 0f64]
-    }
 }
 pub use material::Material;
 mod material_pbr_metallic_roughness {
@@ -443,39 +393,30 @@ mod material_pbr_metallic_roughness {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(rename = "baseColorFactor")]
-        #[serde(default = "get_default_base_color_factor")]
+        #[serde(default)]
         ///The factors for the base color of the material. This value defines linear multipliers for the sampled texels of the base color texture.
-        pub base_color_factor: [f64; 4usize],
+        pub base_color_factor: Option<[f64; 4usize]>,
         #[serde(rename = "baseColorTexture")]
         #[serde(default)]
         ///The base color texture. The first three components (RGB) **MUST** be encoded with the sRGB transfer function. They specify the base color of the material. If the fourth component (A) is present, it represents the linear alpha coverage of the material. Otherwise, the alpha coverage is equal to `1.0`. The `material.alphaMode` property specifies how alpha is interpreted. The stored texels **MUST NOT** be premultiplied. When undefined, the texture **MUST** be sampled as having `1.0` in all components.
         pub base_color_texture: Option<crate::generated::gltf::TextureInfo>,
         #[serde(rename = "metallicFactor")]
-        #[serde(default = "get_default_metallic_factor")]
+        #[serde(default)]
         ///The factor for the metalness of the material. This value defines a linear multiplier for the sampled metalness values of the metallic-roughness texture.
-        pub metallic_factor: f64,
+        pub metallic_factor: Option<f64>,
         #[serde(rename = "metallicRoughnessTexture")]
         #[serde(default)]
         ///The metallic-roughness texture. The metalness values are sampled from the B channel. The roughness values are sampled from the G channel. These values **MUST** be encoded with a linear transfer function. If other channels are present (R or A), they **MUST** be ignored for metallic-roughness calculations. When undefined, the texture **MUST** be sampled as having `1.0` in G and B components.
         pub metallic_roughness_texture: Option<crate::generated::gltf::TextureInfo>,
         #[serde(rename = "roughnessFactor")]
-        #[serde(default = "get_default_roughness_factor")]
+        #[serde(default)]
         ///The factor for the roughness of the material. This value defines a linear multiplier for the sampled roughness values of the metallic-roughness texture.
-        pub roughness_factor: f64,
+        pub roughness_factor: Option<f64>,
     }
     impl crate::GltfObject for MaterialPbrMetallicRoughness {
         fn extensions(&self) -> &Option<Map<String, Value>> {
             &self.extensions
         }
-    }
-    fn get_default_base_color_factor() -> [f64; 4usize] {
-        [1f64, 1f64, 1f64, 1f64]
-    }
-    fn get_default_metallic_factor() -> f64 {
-        1f64
-    }
-    fn get_default_roughness_factor() -> f64 {
-        1f64
     }
 }
 pub use material_pbr_metallic_roughness::MaterialPbrMetallicRoughness;
@@ -493,23 +434,17 @@ mod material_occlusion_texture_info {
         ///The index of the texture.
         pub index: i64,
         #[serde(rename = "texCoord")]
-        #[serde(default = "get_default_tex_coord")]
+        #[serde(default)]
         ///This integer value is used to construct a string in the format `TEXCOORD_<set index>` which is a reference to a key in `mesh.primitives.attributes` (e.g. a value of `0` corresponds to `TEXCOORD_0`). A mesh primitive **MUST** have the corresponding texture coordinate attributes for the material to be applicable to it.
-        pub tex_coord: i64,
-        #[serde(default = "get_default_strength")]
+        pub tex_coord: Option<i64>,
+        #[serde(default)]
         ///A scalar parameter controlling the amount of occlusion applied. A value of `0.0` means no occlusion. A value of `1.0` means full occlusion. This value affects the final occlusion value as: `1.0 + strength * (<sampled occlusion texture value> - 1.0)`.
-        pub strength: f64,
+        pub strength: Option<f64>,
     }
     impl crate::GltfObject for MaterialOcclusionTextureInfo {
         fn extensions(&self) -> &Option<Map<String, Value>> {
             &self.extensions
         }
-    }
-    fn get_default_tex_coord() -> i64 {
-        0i64
-    }
-    fn get_default_strength() -> f64 {
-        1f64
     }
 }
 pub use material_occlusion_texture_info::MaterialOcclusionTextureInfo;
@@ -527,23 +462,17 @@ mod material_normal_texture_info {
         ///The index of the texture.
         pub index: i64,
         #[serde(rename = "texCoord")]
-        #[serde(default = "get_default_tex_coord")]
+        #[serde(default)]
         ///This integer value is used to construct a string in the format `TEXCOORD_<set index>` which is a reference to a key in `mesh.primitives.attributes` (e.g. a value of `0` corresponds to `TEXCOORD_0`). A mesh primitive **MUST** have the corresponding texture coordinate attributes for the material to be applicable to it.
-        pub tex_coord: i64,
-        #[serde(default = "get_default_scale")]
+        pub tex_coord: Option<i64>,
+        #[serde(default)]
         ///The scalar parameter applied to each normal vector of the texture. This value scales the normal vector in X and Y directions using the formula: `scaledNormal =  normalize((<sampled normal texture value> * 2.0 - 1.0) * vec3(<normal scale>, <normal scale>, 1.0))`.
-        pub scale: f64,
+        pub scale: Option<f64>,
     }
     impl crate::GltfObject for MaterialNormalTextureInfo {
         fn extensions(&self) -> &Option<Map<String, Value>> {
             &self.extensions
         }
-    }
-    fn get_default_tex_coord() -> i64 {
-        0i64
-    }
-    fn get_default_scale() -> f64 {
-        1f64
     }
 }
 pub use material_normal_texture_info::MaterialNormalTextureInfo;
@@ -562,17 +491,14 @@ mod texture_info {
         ///The index of the texture.
         pub index: i64,
         #[serde(rename = "texCoord")]
-        #[serde(default = "get_default_tex_coord")]
+        #[serde(default)]
         ///This integer value is used to construct a string in the format `TEXCOORD_<set index>` which is a reference to a key in `mesh.primitives.attributes` (e.g. a value of `0` corresponds to `TEXCOORD_0`). A mesh primitive **MUST** have the corresponding texture coordinate attributes for the material to be applicable to it.
-        pub tex_coord: i64,
+        pub tex_coord: Option<i64>,
     }
     impl crate::GltfObject for TextureInfo {
         fn extensions(&self) -> &Option<Map<String, Value>> {
             &self.extensions
         }
-    }
-    fn get_default_tex_coord() -> i64 {
-        0i64
     }
 }
 pub use texture_info::TextureInfo;
@@ -765,9 +691,9 @@ mod buffer_view {
         ///The length of the bufferView in bytes.
         pub byte_length: i64,
         #[serde(rename = "byteOffset")]
-        #[serde(default = "get_default_byte_offset")]
+        #[serde(default)]
         ///The offset into the buffer in bytes.
-        pub byte_offset: i64,
+        pub byte_offset: Option<i64>,
         #[serde(rename = "byteStride")]
         #[serde(default)]
         ///The stride, in bytes, between vertex attributes.  When this is not defined, data is tightly packed. When two or more accessors use the same buffer view, this field **MUST** be defined.
@@ -780,9 +706,6 @@ mod buffer_view {
         fn extensions(&self) -> &Option<Map<String, Value>> {
             &self.extensions
         }
-    }
-    fn get_default_byte_offset() -> i64 {
-        0i64
     }
 }
 pub use buffer_view::BufferView;
@@ -870,9 +793,9 @@ mod animation_sampler {
         pub extras: Option<serde_json::Value>,
         ///The index of an accessor containing keyframe timestamps. The accessor **MUST** be of scalar type with floating-point components. The values represent time in seconds with `time[0] >= 0.0`, and strictly increasing values, i.e., `time[n + 1] > time[n]`.
         pub input: i64,
-        #[serde(default = "get_default_interpolation")]
+        #[serde(default)]
         ///Interpolation algorithm.
-        pub interpolation: Interpolation,
+        pub interpolation: Option<Interpolation>,
         ///The index of an accessor, containing keyframe output values.
         pub output: i64,
     }
@@ -880,9 +803,6 @@ mod animation_sampler {
         fn extensions(&self) -> &Option<Map<String, Value>> {
             &self.extensions
         }
-    }
-    fn get_default_interpolation() -> Interpolation {
-        Interpolation::default()
     }
 }
 pub use animation_sampler::AnimationSampler;
@@ -983,9 +903,9 @@ mod accessor {
         ///The index of the buffer view. When undefined, the accessor **MUST** be initialized with zeros; `sparse` property or extensions **MAY** override zeros with actual values.
         pub buffer_view: Option<i64>,
         #[serde(rename = "byteOffset")]
-        #[serde(default = "get_default_byte_offset")]
+        #[serde(default)]
         ///The offset relative to the start of the buffer view in bytes.  This **MUST** be a multiple of the size of the component datatype. This property **MUST NOT** be defined when `bufferView` is undefined.
-        pub byte_offset: i64,
+        pub byte_offset: Option<i64>,
         #[serde(rename = "componentType")]
         ///The datatype of the accessor's components.  UNSIGNED_INT type **MUST NOT** be used for any accessor that is not referenced by `mesh.primitive.indices`.
         pub component_type: i64,
@@ -1001,9 +921,9 @@ mod accessor {
 
 `normalized` property has no effect on array values: they always correspond to the actual values stored in the buffer. When the accessor is sparse, this property **MUST** contain minimum values of accessor data with sparse substitution applied.*/
         pub min: Vec<f64>,
-        #[serde(default = "get_default_normalized")]
+        #[serde(default)]
         ///Specifies whether integer data values are normalized (`true`) to [0, 1] (for unsigned types) or to [-1, 1] (for signed types) when they are accessed. This property **MUST NOT** be set to `true` for accessors with `FLOAT` or `UNSIGNED_INT` component type.
-        pub normalized: bool,
+        pub normalized: Option<bool>,
         #[serde(default)]
         ///Sparse storage of elements that deviate from their initialization value.
         pub sparse: Option<crate::generated::gltf::AccessorSparse>,
@@ -1015,12 +935,6 @@ mod accessor {
         fn extensions(&self) -> &Option<Map<String, Value>> {
             &self.extensions
         }
-    }
-    fn get_default_byte_offset() -> i64 {
-        0i64
-    }
-    fn get_default_normalized() -> bool {
-        false
     }
 }
 pub use accessor::Accessor;
@@ -1066,17 +980,14 @@ mod accessor_sparse_values {
         ///The index of the bufferView with sparse values. The referenced buffer view **MUST NOT** have its `target` or `byteStride` properties defined.
         pub buffer_view: i64,
         #[serde(rename = "byteOffset")]
-        #[serde(default = "get_default_byte_offset")]
+        #[serde(default)]
         ///The offset relative to the start of the bufferView in bytes.
-        pub byte_offset: i64,
+        pub byte_offset: Option<i64>,
     }
     impl crate::GltfObject for AccessorSparseValues {
         fn extensions(&self) -> &Option<Map<String, Value>> {
             &self.extensions
         }
-    }
-    fn get_default_byte_offset() -> i64 {
-        0i64
     }
 }
 pub use accessor_sparse_values::AccessorSparseValues;
@@ -1096,9 +1007,9 @@ mod accessor_sparse_indices {
         ///The index of the buffer view with sparse indices. The referenced buffer view **MUST NOT** have its `target` or `byteStride` properties defined. The buffer view and the optional `byteOffset` **MUST** be aligned to the `componentType` byte length.
         pub buffer_view: i64,
         #[serde(rename = "byteOffset")]
-        #[serde(default = "get_default_byte_offset")]
+        #[serde(default)]
         ///The offset relative to the start of the buffer view in bytes.
-        pub byte_offset: i64,
+        pub byte_offset: Option<i64>,
         #[serde(rename = "componentType")]
         ///The indices data type.
         pub component_type: i64,
@@ -1107,9 +1018,6 @@ mod accessor_sparse_indices {
         fn extensions(&self) -> &Option<Map<String, Value>> {
             &self.extensions
         }
-    }
-    fn get_default_byte_offset() -> i64 {
-        0i64
     }
 }
 pub use accessor_sparse_indices::AccessorSparseIndices;

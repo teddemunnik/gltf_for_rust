@@ -39,25 +39,19 @@ pub mod node {
             #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
-            #[serde(default = "get_default_color")]
+            #[serde(default)]
             ///RGB value for the light's color in linear space.
-            pub color: [f64; 3usize],
+            pub color: Option<[f64; 3usize]>,
             ///The id of the light profile referenced by this node.
             pub light: i64,
-            #[serde(default = "get_default_multiplier")]
+            #[serde(default)]
             ///Non-negative factor to scale the light's intensity.
-            pub multiplier: f64,
+            pub multiplier: Option<f64>,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {
                 &self.extensions
             }
-        }
-        fn get_default_color() -> [f64; 3usize] {
-            [1f64, 1f64, 1f64]
-        }
-        fn get_default_multiplier() -> f64 {
-            1f64
         }
     }
     pub use extension::Extension;

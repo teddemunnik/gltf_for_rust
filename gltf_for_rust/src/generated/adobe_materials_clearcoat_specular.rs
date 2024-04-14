@@ -13,13 +13,13 @@ pub mod gltf {
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
             #[serde(rename = "clearcoatIor")]
-            #[serde(default = "get_default_clearcoat_ior")]
+            #[serde(default)]
             ///The clearcoat layer's index of refraction.
-            pub clearcoat_ior: f64,
+            pub clearcoat_ior: Option<f64>,
             #[serde(rename = "clearcoatSpecularFactor")]
-            #[serde(default = "get_default_clearcoat_specular_factor")]
+            #[serde(default)]
             ///The clearcoat layer's specular intensity.
-            pub clearcoat_specular_factor: f64,
+            pub clearcoat_specular_factor: Option<f64>,
             #[serde(rename = "clearcoatSpecularTexture")]
             #[serde(default)]
             ///The clearcoat layer's specular intensity texture. These values are sampled from the B channel.
@@ -29,12 +29,6 @@ pub mod gltf {
             fn extensions(&self) -> &Option<Map<String, Value>> {
                 &self.extensions
             }
-        }
-        fn get_default_clearcoat_ior() -> f64 {
-            1.5f64
-        }
-        fn get_default_clearcoat_specular_factor() -> f64 {
-            1f64
         }
     }
     pub use extension::Extension;
