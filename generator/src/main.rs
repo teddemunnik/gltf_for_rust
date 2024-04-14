@@ -637,7 +637,7 @@ fn load_extensions(
             extension_module.push(generate_rust(&resolver, &context, &schema, &mut open_types, &closed_types)?);
         }
 
-        let output = File::create(format!("{generated_path}\\{extension_module_name}.rs")).unwrap();
+        let output = File::create(format!("{generated_path}/{extension_module_name}.rs")).unwrap();
         let mut writer = BufWriter::new(output);
 
         let rust = quote! {
@@ -692,7 +692,7 @@ impl GeneratedManifest {
 }
 
 fn write_root_module(generated_path: &str, generated_manifest: &GeneratedManifest) {
-    let output = File::create(format!("{generated_path}\\mod.rs")).unwrap();
+    let output = File::create(format!("{generated_path}/mod.rs")).unwrap();
     let mut writer = BufWriter::new(output);
 
     let extension_modules: Vec<TokenStream> = generated_manifest
@@ -715,10 +715,10 @@ fn write_root_module(generated_path: &str, generated_manifest: &GeneratedManifes
 
 fn main() {
     // Recreate the generated directory
-    let generated_path = "gltf_for_rust\\src\\generated";
+    let generated_path = "gltf_for_rust/src/generated";
     ensure_empty_dir(generated_path);
 
-    const SPECIFICATION_FOLDER: &str = "vendor\\gltf\\specification\\2.0\\schema";
+    const SPECIFICATION_FOLDER: &str = "vendor/gltf/specification/2.0/schema";
 
     // Create the core specification schema store
     let mut specification_schema_store = SchemaStore::read(SchemaStoreMeta::Core, SPECIFICATION_FOLDER).unwrap();
@@ -745,14 +745,14 @@ fn main() {
     };
 
     let file: syn::File = syn::parse2(rust).unwrap();
-    let output = File::create(format!("{generated_path}\\gltf.rs")).unwrap();
+    let output = File::create(format!("{generated_path}/gltf.rs")).unwrap();
     let mut writer = BufWriter::new(output);
     write!(writer, "{}", prettyplease::unparse(&file)).unwrap();
 
     let mut generated_manifest = GeneratedManifest::new();
     load_extensions(
         &mut generated_manifest,
-        "vendor\\gltf\\extensions\\2.0\\Khronos",
+        "vendor/gltf/extensions/2.0/Khronos",
         generated_path,
         &specification_schema_store,
     )
@@ -760,7 +760,7 @@ fn main() {
 
     load_extensions(
         &mut generated_manifest,
-        "vendor\\gltf\\extensions\\2.0\\Vendor",
+        "vendor/gltf/extensions/2.0/Vendor",
         generated_path,
         &specification_schema_store,
     )
