@@ -3,6 +3,18 @@ pub mod gltf {
     mod extension {
         use serde::{Serialize, Deserialize};
         use serde_json::{Map, Value};
+        mod packet {
+            use serde::{Serialize, Deserialize};
+            use serde_json::{Map, Value};
+            #[derive(Serialize, Deserialize, Debug)]
+            ///Dictionary of XMP metadata properties. Property names take the form `xmp_namespace_name:property_name`
+            pub struct Packet {
+                #[serde(rename = "@context")]
+                ///Dictionary mapping XMP namespace names to the URI where they are defined
+                pub context: Map<String, Value>,
+            }
+        }
+        pub use packet::Packet;
         #[derive(Serialize, Deserialize, Debug)]
         ///Metadata about the glTF asset.
         pub struct Extension {
@@ -12,7 +24,7 @@ pub mod gltf {
             #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
-            pub packets: Vec<crate::generated::khr_xmp_json_ld::Packet>,
+            pub packets: Vec<Packet>,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {
@@ -27,15 +39,3 @@ pub mod gltf {
         }
     }
 }
-mod packet {
-    use serde::{Serialize, Deserialize};
-    use serde_json::{Map, Value};
-    #[derive(Serialize, Deserialize, Debug)]
-    ///Dictionary of XMP metadata properties. Property names take the form `xmp_namespace_name:property_name`
-    pub struct Packet {
-        #[serde(rename = "@context")]
-        ///Dictionary mapping XMP namespace names to the URI where they are defined
-        pub context: Map<String, Value>,
-    }
-}
-pub use packet::Packet;

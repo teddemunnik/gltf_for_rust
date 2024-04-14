@@ -87,7 +87,7 @@ mod module {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(default)]
-        ///The user-defined name of this object.
+        ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
         pub name: Option<String>,
         #[serde(rename = "bufferView")]
         #[serde(default)]
@@ -102,7 +102,7 @@ mod module {
         ///Relative path of the module.  This field **MUST** be defined if `bufferView` is defined or `uri` is defined and contains a data-URI, otherwise this field **MUST NOT** be defined.
         pub module_path: Option<String>,
         #[serde(default)]
-        ///The URI (or IRI) of the MDL module.
+        ///The URI (or IRI) of the MDL module.  Relative paths are relative to the current glTF asset.  Instead of referencing an external file, this field **MAY** contain a `data:`-URI. This field **MUST NOT** be defined when `bufferView` is defined.
         pub uri: Option<String>,
     }
     impl crate::GltfObject for Module {
@@ -125,7 +125,7 @@ mod function_call {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(default)]
-        ///The user-defined name of this object.
+        ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
         pub name: Option<String>,
         #[serde(default)]
         ///A list of named value and/or function call arguments.  Multiple arguments with the same name **MUST NOT** exist.
@@ -239,7 +239,7 @@ mod bsdf_measurement {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(default)]
-        ///The user-defined name of this object.
+        ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
         pub name: Option<String>,
         #[serde(rename = "bufferView")]
         #[serde(default)]
@@ -250,7 +250,7 @@ mod bsdf_measurement {
         ///The BSDF measurement's media type.  This field **MUST** be defined when `bufferView` is defined.
         pub mime_type: Option<MimeType>,
         #[serde(default)]
-        ///The URI (or IRI) of the MBSDF.
+        ///The URI (or IRI) of the MBSDF.  Relative paths are relative to the current glTF asset.  Instead of referencing an external file, this field **MAY** contain a `data:`-URI. This field **MUST NOT** be defined when `bufferView` is defined.
         pub uri: Option<String>,
     }
     impl crate::GltfObject for BsdfMeasurement {

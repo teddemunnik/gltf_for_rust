@@ -12,7 +12,7 @@ pub mod gltf {
             #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
-            pub lights: Vec<crate::generated::ext_lights_ies::LightProfile>,
+            pub lights: Vec<Map<String, Value>>,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {
@@ -67,42 +67,3 @@ pub mod node {
         }
     }
 }
-mod light_profile {
-    use serde::{Serialize, Deserialize};
-    use serde_json::{Map, Value};
-    #[derive(Serialize, Deserialize, Debug)]
-    pub enum MimeType {
-        #[serde(rename = "application/x-ies-lm-63")]
-        ApplicationXIesLm63,
-    }
-    #[derive(Serialize, Deserialize, Debug)]
-    ///An IES light profile.
-    pub struct LightProfile {
-        #[serde(default)]
-        ///JSON object with extension-specific objects.
-        pub extensions: Option<Map<String, Value>>,
-        #[serde(default)]
-        ///Application-specific data.
-        pub extras: Option<serde_json::Value>,
-        #[serde(default)]
-        ///The user-defined name of this object.
-        pub name: Option<String>,
-        #[serde(rename = "bufferView")]
-        #[serde(default)]
-        ///The index of the bufferView that contains the IES light profile. This field **MUST NOT** be defined when `uri` is defined.
-        pub buffer_view: Option<i64>,
-        #[serde(rename = "mimeType")]
-        #[serde(default)]
-        ///The light profile's media type. This field **MUST** be defined when `bufferView` is defined.
-        pub mime_type: Option<MimeType>,
-        #[serde(default)]
-        ///The URI (or IRI) of the light profile.
-        pub uri: Option<String>,
-    }
-    impl crate::GltfObject for LightProfile {
-        fn extensions(&self) -> &Option<Map<String, Value>> {
-            &self.extensions
-        }
-    }
-}
-pub use light_profile::LightProfile;

@@ -51,7 +51,7 @@ pub mod node {
             pub no_obscuration: Option<bool>,
             #[serde(rename = "solarPanelGroupName")]
             #[serde(default)]
-            ///The name of a Solar Panel Group that includes this node.
+            ///The name of a Solar Panel Group that includes this node.  Solar Panel Groups are defined in the glTF root extension.
             pub solar_panel_group_name: Option<String>,
         }
         impl crate::GltfObject for Extension {

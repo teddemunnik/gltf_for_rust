@@ -12,7 +12,7 @@ mod gltf {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(default)]
-        ///An array of accessors.
+        ///An array of accessors.  An accessor is a typed view into a bufferView.
         pub accessors: Vec<crate::generated::gltf::Accessor>,
         #[serde(default)]
         ///An array of keyframe animations.
@@ -21,13 +21,13 @@ mod gltf {
         pub asset: crate::generated::gltf::Asset,
         #[serde(rename = "bufferViews")]
         #[serde(default)]
-        ///An array of bufferViews.
+        ///An array of bufferViews.  A bufferView is a view into a buffer generally representing a subset of the buffer.
         pub buffer_views: Vec<crate::generated::gltf::BufferView>,
         #[serde(default)]
-        ///An array of buffers.
+        ///An array of buffers.  A buffer points to binary geometry, animation, or skins.
         pub buffers: Vec<crate::generated::gltf::Buffer>,
         #[serde(default)]
-        ///An array of cameras.
+        ///An array of cameras.  A camera defines a projection matrix.
         pub cameras: Vec<crate::generated::gltf::Camera>,
         #[serde(rename = "extensionsRequired")]
         #[serde(default)]
@@ -38,28 +38,28 @@ mod gltf {
         ///Names of glTF extensions used in this asset.
         pub extensions_used: Vec<String>,
         #[serde(default)]
-        ///An array of images.
+        ///An array of images.  An image defines data used to create a texture.
         pub images: Vec<crate::generated::gltf::Image>,
         #[serde(default)]
-        ///An array of materials.
+        ///An array of materials.  A material defines the appearance of a primitive.
         pub materials: Vec<crate::generated::gltf::Material>,
         #[serde(default)]
-        ///An array of meshes.
+        ///An array of meshes.  A mesh is a set of primitives to be rendered.
         pub meshes: Vec<crate::generated::gltf::Mesh>,
         #[serde(default)]
         ///An array of nodes.
         pub nodes: Vec<crate::generated::gltf::Node>,
         #[serde(default)]
-        ///An array of samplers.
+        ///An array of samplers.  A sampler contains properties for texture filtering and wrapping modes.
         pub samplers: Vec<crate::generated::gltf::Sampler>,
         #[serde(default)]
-        ///The index of the default scene.
+        ///The index of the default scene.  This property **MUST NOT** be defined, when `scenes` is undefined.
         pub scene: Option<i64>,
         #[serde(default)]
         ///An array of scenes.
         pub scenes: Vec<crate::generated::gltf::Scene>,
         #[serde(default)]
-        ///An array of skins.
+        ///An array of skins.  A skin is defined by joints and matrices.
         pub skins: Vec<crate::generated::gltf::Skin>,
         #[serde(default)]
         ///An array of textures.
@@ -85,7 +85,7 @@ mod texture {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(default)]
-        ///The user-defined name of this object.
+        ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
         pub name: Option<String>,
         #[serde(default)]
         ///The index of the sampler used by this texture. When undefined, a sampler with repeat wrapping and auto filtering **SHOULD** be used.
@@ -114,16 +114,16 @@ mod skin {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(default)]
-        ///The user-defined name of this object.
+        ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
         pub name: Option<String>,
         #[serde(rename = "inverseBindMatrices")]
         #[serde(default)]
-        ///The index of the accessor containing the floating-point 4x4 inverse-bind matrices.
+        ///The index of the accessor containing the floating-point 4x4 inverse-bind matrices. Its `accessor.count` property **MUST** be greater than or equal to the number of elements of the `joints` array. When undefined, each matrix is a 4x4 identity matrix.
         pub inverse_bind_matrices: Option<i64>,
         ///Indices of skeleton nodes, used as joints in this skin.
         pub joints: Vec<i64>,
         #[serde(default)]
-        ///The index of the node used as a skeleton root.
+        ///The index of the node used as a skeleton root. The node **MUST** be the closest common root of the joints hierarchy or a direct or indirect parent node of the closest common root.
         pub skeleton: Option<i64>,
     }
     impl crate::GltfObject for Skin {
@@ -146,7 +146,7 @@ mod scene {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(default)]
-        ///The user-defined name of this object.
+        ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
         pub name: Option<String>,
         #[serde(default)]
         ///The indices of each root node.
@@ -172,7 +172,7 @@ mod sampler {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(default)]
-        ///The user-defined name of this object.
+        ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
         pub name: Option<String>,
         #[serde(rename = "magFilter")]
         #[serde(default)]
@@ -184,7 +184,7 @@ mod sampler {
         pub min_filter: Option<i64>,
         #[serde(rename = "wrapS")]
         #[serde(default = "get_default_wrap_s")]
-        ///S (U) wrapping mode.
+        ///S (U) wrapping mode.  All valid values correspond to WebGL enums.
         pub wrap_s: i64,
         #[serde(rename = "wrapT")]
         #[serde(default = "get_default_wrap_t")]
@@ -217,7 +217,7 @@ mod node {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(default)]
-        ///The user-defined name of this object.
+        ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
         pub name: Option<String>,
         #[serde(default)]
         ///The index of the camera referenced by this node.
@@ -238,7 +238,7 @@ mod node {
         ///The node's non-uniform scale, given as the scaling factors along the x, y, and z axes.
         pub scale: [f64; 3usize],
         #[serde(default)]
-        ///The index of the skin referenced by this node.
+        ///The index of the skin referenced by this node. When a skin is referenced by a node within a scene, all joints used by the skin **MUST** belong to the same scene. When defined, `mesh` **MUST** also be defined.
         pub skin: Option<i64>,
         #[serde(default = "get_default_translation")]
         ///The node's translation along the x, y, and z axes.
@@ -296,7 +296,7 @@ mod mesh {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(default)]
-        ///The user-defined name of this object.
+        ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
         pub name: Option<String>,
         ///An array of primitives, each defining geometry to be rendered.
         pub primitives: Vec<crate::generated::gltf::MeshPrimitive>,
@@ -326,7 +326,7 @@ mod mesh_primitive {
         ///A plain JSON object, where each key corresponds to a mesh attribute semantic and each value is the index of the accessor containing attribute's data.
         pub attributes: Map<String, Value>,
         #[serde(default)]
-        ///The index of the accessor that contains the vertex indices.
+        ///The index of the accessor that contains the vertex indices.  When this is undefined, the primitive defines non-indexed geometry.  When defined, the accessor **MUST** have `SCALAR` type and an unsigned integer component type.
         pub indices: Option<i64>,
         #[serde(default)]
         ///The index of the material to apply to this primitive when rendering.
@@ -372,35 +372,35 @@ mod material {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(default)]
-        ///The user-defined name of this object.
+        ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
         pub name: Option<String>,
         #[serde(rename = "alphaCutoff")]
         #[serde(default = "get_default_alpha_cutoff")]
-        ///The alpha cutoff value of the material.
+        ///Specifies the cutoff threshold when in `MASK` alpha mode. If the alpha value is greater than or equal to this value then it is rendered as fully opaque, otherwise, it is rendered as fully transparent. A value greater than `1.0` will render the entire material as fully transparent. This value **MUST** be ignored for other alpha modes. When `alphaMode` is not defined, this value **MUST NOT** be defined.
         pub alpha_cutoff: f64,
         #[serde(rename = "alphaMode")]
         #[serde(default = "get_default_alpha_mode")]
-        ///The alpha rendering mode of the material.
+        ///The material's alpha rendering mode enumeration specifying the interpretation of the alpha value of the base color.
         pub alpha_mode: AlphaMode,
         #[serde(rename = "doubleSided")]
         #[serde(default = "get_default_double_sided")]
-        ///Specifies whether the material is double sided.
+        ///Specifies whether the material is double sided. When this value is false, back-face culling is enabled. When this value is true, back-face culling is disabled and double-sided lighting is enabled. The back-face **MUST** have its normals reversed before the lighting equation is evaluated.
         pub double_sided: bool,
         #[serde(rename = "emissiveFactor")]
         #[serde(default = "get_default_emissive_factor")]
-        ///The factors for the emissive color of the material.
+        ///The factors for the emissive color of the material. This value defines linear multipliers for the sampled texels of the emissive texture.
         pub emissive_factor: [f64; 3usize],
         #[serde(rename = "emissiveTexture")]
         #[serde(default)]
-        ///The emissive texture.
+        ///The emissive texture. It controls the color and intensity of the light being emitted by the material. This texture contains RGB components encoded with the sRGB transfer function. If a fourth component (A) is present, it **MUST** be ignored. When undefined, the texture **MUST** be sampled as having `1.0` in RGB components.
         pub emissive_texture: Option<crate::generated::gltf::TextureInfo>,
         #[serde(rename = "normalTexture")]
         #[serde(default)]
-        ///The tangent space normal texture.
+        ///The tangent space normal texture. The texture encodes RGB components with linear transfer function. Each texel represents the XYZ components of a normal vector in tangent space. The normal vectors use the convention +X is right and +Y is up. +Z points toward the viewer. If a fourth component (A) is present, it **MUST** be ignored. When undefined, the material does not have a tangent space normal texture.
         pub normal_texture: Option<crate::generated::gltf::MaterialNormalTextureInfo>,
         #[serde(rename = "occlusionTexture")]
         #[serde(default)]
-        ///The occlusion texture.
+        ///The occlusion texture. The occlusion values are linearly sampled from the R channel. Higher values indicate areas that receive full indirect lighting and lower values indicate no indirect lighting. If other channels are present (GBA), they **MUST** be ignored for occlusion calculations. When undefined, the material does not have an occlusion texture.
         pub occlusion_texture: Option<
             crate::generated::gltf::MaterialOcclusionTextureInfo,
         >,
@@ -444,23 +444,23 @@ mod material_pbr_metallic_roughness {
         pub extras: Option<serde_json::Value>,
         #[serde(rename = "baseColorFactor")]
         #[serde(default = "get_default_base_color_factor")]
-        ///The factors for the base color of the material.
+        ///The factors for the base color of the material. This value defines linear multipliers for the sampled texels of the base color texture.
         pub base_color_factor: [f64; 4usize],
         #[serde(rename = "baseColorTexture")]
         #[serde(default)]
-        ///The base color texture.
+        ///The base color texture. The first three components (RGB) **MUST** be encoded with the sRGB transfer function. They specify the base color of the material. If the fourth component (A) is present, it represents the linear alpha coverage of the material. Otherwise, the alpha coverage is equal to `1.0`. The `material.alphaMode` property specifies how alpha is interpreted. The stored texels **MUST NOT** be premultiplied. When undefined, the texture **MUST** be sampled as having `1.0` in all components.
         pub base_color_texture: Option<crate::generated::gltf::TextureInfo>,
         #[serde(rename = "metallicFactor")]
         #[serde(default = "get_default_metallic_factor")]
-        ///The factor for the metalness of the material.
+        ///The factor for the metalness of the material. This value defines a linear multiplier for the sampled metalness values of the metallic-roughness texture.
         pub metallic_factor: f64,
         #[serde(rename = "metallicRoughnessTexture")]
         #[serde(default)]
-        ///The metallic-roughness texture.
+        ///The metallic-roughness texture. The metalness values are sampled from the B channel. The roughness values are sampled from the G channel. These values **MUST** be encoded with a linear transfer function. If other channels are present (R or A), they **MUST** be ignored for metallic-roughness calculations. When undefined, the texture **MUST** be sampled as having `1.0` in G and B components.
         pub metallic_roughness_texture: Option<crate::generated::gltf::TextureInfo>,
         #[serde(rename = "roughnessFactor")]
         #[serde(default = "get_default_roughness_factor")]
-        ///The factor for the roughness of the material.
+        ///The factor for the roughness of the material. This value defines a linear multiplier for the sampled roughness values of the metallic-roughness texture.
         pub roughness_factor: f64,
     }
     impl crate::GltfObject for MaterialPbrMetallicRoughness {
@@ -494,10 +494,10 @@ mod material_occlusion_texture_info {
         pub index: i64,
         #[serde(rename = "texCoord")]
         #[serde(default = "get_default_tex_coord")]
-        ///The set index of texture's TEXCOORD attribute used for texture coordinate mapping.
+        ///This integer value is used to construct a string in the format `TEXCOORD_<set index>` which is a reference to a key in `mesh.primitives.attributes` (e.g. a value of `0` corresponds to `TEXCOORD_0`). A mesh primitive **MUST** have the corresponding texture coordinate attributes for the material to be applicable to it.
         pub tex_coord: i64,
         #[serde(default = "get_default_strength")]
-        ///A scalar multiplier controlling the amount of occlusion applied.
+        ///A scalar parameter controlling the amount of occlusion applied. A value of `0.0` means no occlusion. A value of `1.0` means full occlusion. This value affects the final occlusion value as: `1.0 + strength * (<sampled occlusion texture value> - 1.0)`.
         pub strength: f64,
     }
     impl crate::GltfObject for MaterialOcclusionTextureInfo {
@@ -528,10 +528,10 @@ mod material_normal_texture_info {
         pub index: i64,
         #[serde(rename = "texCoord")]
         #[serde(default = "get_default_tex_coord")]
-        ///The set index of texture's TEXCOORD attribute used for texture coordinate mapping.
+        ///This integer value is used to construct a string in the format `TEXCOORD_<set index>` which is a reference to a key in `mesh.primitives.attributes` (e.g. a value of `0` corresponds to `TEXCOORD_0`). A mesh primitive **MUST** have the corresponding texture coordinate attributes for the material to be applicable to it.
         pub tex_coord: i64,
         #[serde(default = "get_default_scale")]
-        ///The scalar parameter applied to each normal vector of the normal texture.
+        ///The scalar parameter applied to each normal vector of the texture. This value scales the normal vector in X and Y directions using the formula: `scaledNormal =  normalize((<sampled normal texture value> * 2.0 - 1.0) * vec3(<normal scale>, <normal scale>, 1.0))`.
         pub scale: f64,
     }
     impl crate::GltfObject for MaterialNormalTextureInfo {
@@ -563,7 +563,7 @@ mod texture_info {
         pub index: i64,
         #[serde(rename = "texCoord")]
         #[serde(default = "get_default_tex_coord")]
-        ///The set index of texture's TEXCOORD attribute used for texture coordinate mapping.
+        ///This integer value is used to construct a string in the format `TEXCOORD_<set index>` which is a reference to a key in `mesh.primitives.attributes` (e.g. a value of `0` corresponds to `TEXCOORD_0`). A mesh primitive **MUST** have the corresponding texture coordinate attributes for the material to be applicable to it.
         pub tex_coord: i64,
     }
     impl crate::GltfObject for TextureInfo {
@@ -596,7 +596,7 @@ mod image {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(default)]
-        ///The user-defined name of this object.
+        ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
         pub name: Option<String>,
         #[serde(rename = "bufferView")]
         #[serde(default)]
@@ -607,7 +607,7 @@ mod image {
         ///The image's media type. This field **MUST** be defined when `bufferView` is defined.
         pub mime_type: Option<MimeType>,
         #[serde(default)]
-        ///The URI (or IRI) of the image.
+        ///The URI (or IRI) of the image.  Relative paths are relative to the current glTF asset.  Instead of referencing an external file, this field **MAY** contain a `data:`-URI. This field **MUST NOT** be defined when `bufferView` is defined.
         pub uri: Option<String>,
     }
     impl crate::GltfObject for Image {
@@ -637,7 +637,7 @@ mod camera {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(default)]
-        ///The user-defined name of this object.
+        ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
         pub name: Option<String>,
         #[serde(default)]
         ///An orthographic camera containing properties to create an orthographic projection matrix. This property **MUST NOT** be defined when `perspective` is defined.
@@ -646,7 +646,7 @@ mod camera {
         ///A perspective camera containing properties to create a perspective projection matrix. This property **MUST NOT** be defined when `orthographic` is defined.
         pub perspective: Option<crate::generated::gltf::CameraPerspective>,
         #[serde(rename = "type")]
-        ///Specifies if the camera uses a perspective or orthographic projection.
+        ///Specifies if the camera uses a perspective or orthographic projection.  Based on this, either the camera's `perspective` or `orthographic` property **MUST** be defined.
         pub ty: Type,
     }
     impl crate::GltfObject for Camera {
@@ -670,12 +670,12 @@ mod camera_perspective {
         pub extras: Option<serde_json::Value>,
         #[serde(rename = "aspectRatio")]
         #[serde(default)]
-        ///The floating-point aspect ratio of the field of view.
+        ///The floating-point aspect ratio of the field of view. When undefined, the aspect ratio of the rendering viewport **MUST** be used.
         pub aspect_ratio: Option<f64>,
         ///The floating-point vertical field of view in radians. This value **SHOULD** be less than π.
         pub yfov: f64,
         #[serde(default)]
-        ///The floating-point distance to the far clipping plane.
+        ///The floating-point distance to the far clipping plane. When defined, `zfar` **MUST** be greater than `znear`. If `zfar` is undefined, client implementations **SHOULD** use infinite projection matrix.
         pub zfar: Option<f64>,
         ///The floating-point distance to the near clipping plane.
         pub znear: f64,
@@ -728,13 +728,13 @@ mod buffer {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(default)]
-        ///The user-defined name of this object.
+        ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
         pub name: Option<String>,
         #[serde(rename = "byteLength")]
         ///The length of the buffer in bytes.
         pub byte_length: i64,
         #[serde(default)]
-        ///The URI (or IRI) of the buffer.
+        ///The URI (or IRI) of the buffer.  Relative paths are relative to the current glTF asset.  Instead of referencing an external file, this field **MAY** contain a `data:`-URI.
         pub uri: Option<String>,
     }
     impl crate::GltfObject for Buffer {
@@ -757,7 +757,7 @@ mod buffer_view {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(default)]
-        ///The user-defined name of this object.
+        ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
         pub name: Option<String>,
         ///The index of the buffer.
         pub buffer: i64,
@@ -770,7 +770,7 @@ mod buffer_view {
         pub byte_offset: i64,
         #[serde(rename = "byteStride")]
         #[serde(default)]
-        ///The stride, in bytes.
+        ///The stride, in bytes, between vertex attributes.  When this is not defined, data is tightly packed. When two or more accessors use the same buffer view, this field **MUST** be defined.
         pub byte_stride: Option<i64>,
         #[serde(default)]
         ///The hint representing the intended GPU buffer type to use with this buffer view.
@@ -831,7 +831,7 @@ mod animation {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(default)]
-        ///The user-defined name of this object.
+        ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
         pub name: Option<String>,
         ///An array of animation channels. An animation channel combines an animation sampler with a target property being animated. Different channels of the same animation **MUST NOT** have the same targets.
         pub channels: Vec<crate::generated::gltf::AnimationChannel>,
@@ -868,7 +868,7 @@ mod animation_sampler {
         #[serde(default)]
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
-        ///The index of an accessor containing keyframe timestamps.
+        ///The index of an accessor containing keyframe timestamps. The accessor **MUST** be of scalar type with floating-point components. The values represent time in seconds with `time[0] >= 0.0`, and strictly increasing values, i.e., `time[n + 1] > time[n]`.
         pub input: i64,
         #[serde(default = "get_default_interpolation")]
         ///Interpolation algorithm.
@@ -898,7 +898,7 @@ mod animation_channel {
         #[serde(default)]
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
-        ///The index of a sampler in this animation used to compute the value for the target.
+        ///The index of a sampler in this animation used to compute the value for the target, e.g., a node's translation, rotation, or scale (TRS).
         pub sampler: i64,
         ///The descriptor of the animated property.
         pub target: crate::generated::gltf::AnimationChannelTarget,
@@ -976,29 +976,33 @@ mod accessor {
         ///Application-specific data.
         pub extras: Option<serde_json::Value>,
         #[serde(default)]
-        ///The user-defined name of this object.
+        ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
         pub name: Option<String>,
         #[serde(rename = "bufferView")]
         #[serde(default)]
-        ///The index of the bufferView.
+        ///The index of the buffer view. When undefined, the accessor **MUST** be initialized with zeros; `sparse` property or extensions **MAY** override zeros with actual values.
         pub buffer_view: Option<i64>,
         #[serde(rename = "byteOffset")]
         #[serde(default = "get_default_byte_offset")]
-        ///The offset relative to the start of the buffer view in bytes.
+        ///The offset relative to the start of the buffer view in bytes.  This **MUST** be a multiple of the size of the component datatype. This property **MUST NOT** be defined when `bufferView` is undefined.
         pub byte_offset: i64,
         #[serde(rename = "componentType")]
-        ///The datatype of the accessor's components.
+        ///The datatype of the accessor's components.  UNSIGNED_INT type **MUST NOT** be used for any accessor that is not referenced by `mesh.primitive.indices`.
         pub component_type: i64,
-        ///The number of elements referenced by this accessor.
+        ///The number of elements referenced by this accessor, not to be confused with the number of bytes or number of components.
         pub count: i64,
         #[serde(default)]
-        ///Maximum value of each component in this accessor.
+        /**Maximum value of each component in this accessor.  Array elements **MUST** be treated as having the same data type as accessor's `componentType`. Both `min` and `max` arrays have the same length.  The length is determined by the value of the `type` property; it can be 1, 2, 3, 4, 9, or 16.
+
+`normalized` property has no effect on array values: they always correspond to the actual values stored in the buffer. When the accessor is sparse, this property **MUST** contain maximum values of accessor data with sparse substitution applied.*/
         pub max: Vec<f64>,
         #[serde(default)]
-        ///Minimum value of each component in this accessor.
+        /**Minimum value of each component in this accessor.  Array elements **MUST** be treated as having the same data type as accessor's `componentType`. Both `min` and `max` arrays have the same length.  The length is determined by the value of the `type` property; it can be 1, 2, 3, 4, 9, or 16.
+
+`normalized` property has no effect on array values: they always correspond to the actual values stored in the buffer. When the accessor is sparse, this property **MUST** contain minimum values of accessor data with sparse substitution applied.*/
         pub min: Vec<f64>,
         #[serde(default = "get_default_normalized")]
-        ///Specifies whether integer data values are normalized before usage.
+        ///Specifies whether integer data values are normalized (`true`) to [0, 1] (for unsigned types) or to [-1, 1] (for signed types) when they are accessed. This property **MUST NOT** be set to `true` for accessors with `FLOAT` or `UNSIGNED_INT` component type.
         pub normalized: bool,
         #[serde(default)]
         ///Sparse storage of elements that deviate from their initialization value.

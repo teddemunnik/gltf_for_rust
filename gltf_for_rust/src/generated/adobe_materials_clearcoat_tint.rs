@@ -14,11 +14,11 @@ pub mod material {
             pub extras: Option<serde_json::Value>,
             #[serde(rename = "clearcoatTintFactor")]
             #[serde(default = "get_default_clearcoat_tint_factor")]
-            ///The transmittance of the clearcoat layer.
+            ///The colour of light allowed to be transmitted through the clearcoat layer of the material. A value of black means no light passes through. A value of white means all light passes through. These values are linear.
             pub clearcoat_tint_factor: [f64; 3usize],
             #[serde(rename = "clearcoatTintTexture")]
             #[serde(default)]
-            ///The clearcoat layer tint texture.
+            ///The clearcoat layer tint texture.  The values are stored in sRGB.  Assume white colour if no texture is supplied.
             pub clearcoat_tint_texture: Option<crate::generated::gltf::TextureInfo>,
         }
         impl crate::GltfObject for Extension {

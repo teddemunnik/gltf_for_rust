@@ -14,25 +14,25 @@ pub mod material {
             pub extras: Option<serde_json::Value>,
             #[serde(rename = "clearcoatFactor")]
             #[serde(default = "get_default_clearcoat_factor")]
-            ///The clearcoat layer intensity.
+            ///The clearcoat layer intensity (aka opacity) of the material. A value of 0.0 means the material has no clearcoat layer enabled.
             pub clearcoat_factor: f64,
             #[serde(rename = "clearcoatNormalTexture")]
             #[serde(default)]
-            ///The clearcoat normal map texture.
+            ///A tangent space normal map for the clearcoat layer.  If desired, this may be a reference to the same normal map used by the base material.  If not supplied, no normal mapping is applied to the clear coat layer.
             pub clearcoat_normal_texture: Option<
                 crate::generated::gltf::MaterialNormalTextureInfo,
             >,
             #[serde(rename = "clearcoatRoughnessFactor")]
             #[serde(default = "get_default_clearcoat_roughness_factor")]
-            ///The clearcoat layer roughness.
+            ///The clearcoat layer roughness of the material.
             pub clearcoat_roughness_factor: f64,
             #[serde(rename = "clearcoatRoughnessTexture")]
             #[serde(default)]
-            ///The clearcoat layer roughness texture.
+            ///The clearcoat layer roughness texture. These values are sampled from the G channel.  The values are linear.  Use value 1.0 if no texture is supplied.
             pub clearcoat_roughness_texture: Option<crate::generated::gltf::TextureInfo>,
             #[serde(rename = "clearcoatTexture")]
             #[serde(default)]
-            ///The clearcoat layer intensity texture.
+            ///The clearcoat layer intensity texture. These values are sampled from the R channel.  The values are linear.  Use value 1.0 if no texture is supplied.
             pub clearcoat_texture: Option<crate::generated::gltf::TextureInfo>,
         }
         impl crate::GltfObject for Extension {

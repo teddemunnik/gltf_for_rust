@@ -22,7 +22,7 @@ pub mod gltf {
             pub clearcoat_specular_factor: f64,
             #[serde(rename = "clearcoatSpecularTexture")]
             #[serde(default)]
-            ///The clearcoat layer specular intensity texture.
+            ///The clearcoat layer's specular intensity texture. These values are sampled from the B channel.
             pub clearcoat_specular_texture: Option<crate::generated::gltf::TextureInfo>,
         }
         impl crate::GltfObject for Extension {

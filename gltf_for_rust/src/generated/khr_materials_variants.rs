@@ -15,7 +15,7 @@ pub mod gltf {
                 #[serde(default)]
                 ///Application-specific data.
                 pub extras: Option<serde_json::Value>,
-                ///The user-defined name of this object.
+                ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
                 pub name: String,
             }
             impl crate::GltfObject for Variant {
@@ -64,12 +64,12 @@ pub mod mesh_primitive {
                 #[serde(default)]
                 ///Application-specific data.
                 pub extras: Option<serde_json::Value>,
-                ///The material associated with the set of variants.
+                ///A reference to the material associated with the given array of variants.
                 pub material: i64,
                 #[serde(default)]
-                ///The user-defined name of this variant material mapping.
+                ///The optional user-defined name of this variant material mapping.  This is not necessarily unique.
                 pub name: Option<String>,
-                ///An array of variant index values.
+                ///An array of index values that reference variants defined in the glTF root's extension object.
                 pub variants: Vec<i64>,
             }
             impl crate::GltfObject for Mapping {
@@ -87,7 +87,7 @@ pub mod mesh_primitive {
             #[serde(default)]
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
-            ///A list of material to variant mappings
+            ///An array of object values that associate an indexed material to a set of variants.
             pub mappings: Vec<Mapping>,
         }
         impl crate::GltfObject for Extension {

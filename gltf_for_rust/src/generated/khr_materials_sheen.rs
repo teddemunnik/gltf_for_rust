@@ -18,15 +18,15 @@ pub mod material {
             pub sheen_color_factor: [f64; 3usize],
             #[serde(rename = "sheenColorTexture")]
             #[serde(default)]
-            ///The sheen color (RGB) texture.
+            ///The sheen color (RGB) texture. Stored in channel RGB, the sheen color is in sRGB transfer function.
             pub sheen_color_texture: Option<crate::generated::gltf::TextureInfo>,
             #[serde(rename = "sheenRoughnessFactor")]
             #[serde(default = "get_default_sheen_roughness_factor")]
-            ///The sheen layer roughness.
+            ///The sheen layer roughness of the material.
             pub sheen_roughness_factor: f64,
             #[serde(rename = "sheenRoughnessTexture")]
             #[serde(default)]
-            ///The sheen roughness (Alpha) texture.
+            ///The sheen roughness (Alpha) texture. Stored in alpha channel, the roughness value is in linear space.
             pub sheen_roughness_texture: Option<crate::generated::gltf::TextureInfo>,
         }
         impl crate::GltfObject for Extension {

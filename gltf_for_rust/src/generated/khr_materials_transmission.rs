@@ -14,11 +14,11 @@ pub mod material {
             pub extras: Option<serde_json::Value>,
             #[serde(rename = "transmissionFactor")]
             #[serde(default = "get_default_transmission_factor")]
-            ///The base percentage of light transmitted through the surface.
+            ///The base percentage of non-specularly reflected light that is transmitted through the surface. i.e. of the light that penetrates a surface (isn't specularly reflected), this is the percentage that is transmitted and not diffusely re-emitted.
             pub transmission_factor: f64,
             #[serde(rename = "transmissionTexture")]
             #[serde(default)]
-            ///A texture that defines the transmission percentage of the surface, sampled from the R channel. These values are linear, and will be multiplied by transmissionFactor.
+            ///A texture that defines the transmission percentage of the surface, sampled from the R channel. These values are linear, and will be multiplied by transmissionFactor. This indicates the percentage of non-specularly reflected light that is transmitted through the surface. i.e. of the light that penetrates a surface (isn't specularly reflected), this is the percentage is transmitted and not diffusely re-emitted.
             pub transmission_texture: Option<crate::generated::gltf::TextureInfo>,
         }
         impl crate::GltfObject for Extension {

@@ -13,7 +13,7 @@ pub mod gltf {
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
             #[serde(default)]
-            ///An array of articulations.
+            ///An array of articulations.  An articulation indicates a named range of motion available to one or more nodes within the model.
             pub articulations: Vec<crate::generated::agi_articulations::Articulation>,
         }
         impl crate::GltfObject for Extension {
@@ -44,7 +44,7 @@ pub mod node {
             pub extras: Option<serde_json::Value>,
             #[serde(rename = "articulationName")]
             #[serde(default)]
-            ///The name of an Articulation that applies to this node.
+            ///The name of an Articulation that applies to this node.  Articulations are defined in the glTF root extension.  A single articulation may apply to more than one node, and its stage values set the transform for all assigned nodes simultaneously.
             pub articulation_name: Option<String>,
             #[serde(rename = "isAttachPoint")]
             #[serde(default)]

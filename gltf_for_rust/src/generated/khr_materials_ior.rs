@@ -13,7 +13,7 @@ pub mod material {
             ///Application-specific data.
             pub extras: Option<serde_json::Value>,
             #[serde(default = "get_default_ior")]
-            ///The index of refraction.
+            ///The index of refraction (IOR) is a measured physical number usually in the range between 1 and 2 that determines how much the path of light is bent, or refracted, when entering a material. It also influences the ratio between reflected and transmitted light, calculated from the Fresnel equations.
             pub ior: f64,
         }
         impl crate::GltfObject for Extension {

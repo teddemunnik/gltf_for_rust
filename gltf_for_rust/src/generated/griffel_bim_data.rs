@@ -3,25 +3,25 @@ pub mod gltf {
     mod extension {
         use serde::{Serialize, Deserialize};
         use serde_json::{Map, Value};
-        mod node_property {
+        mod property {
             use serde::{Serialize, Deserialize};
             use serde_json::{Map, Value};
             #[derive(Serialize, Deserialize, Debug)]
             ///Key value pair - unique property (instance or type) attached to nodes. Name and value are referenced by index of corresponding root level collection.
-            pub struct NodeProperty {
+            pub struct Property {
                 ///Index of a property name in the root level collection.
                 pub name: i64,
                 ///Index of a property value in the root level collection.
                 pub value: i64,
             }
         }
-        pub use node_property::NodeProperty;
-        mod node_type {
+        pub use property::Property;
+        mod ty {
             use serde::{Serialize, Deserialize};
             use serde_json::{Map, Value};
             #[derive(Serialize, Deserialize, Debug)]
             ///Set of properties which are common for many nodes.
-            pub struct NodeType {
+            pub struct Type {
                 #[serde(default)]
                 ///Name of the type.
                 pub name: Option<String>,
@@ -29,12 +29,12 @@ pub mod gltf {
                 pub properties: Vec<i64>,
             }
         }
-        pub use node_type::NodeType;
+        pub use ty::Type;
         #[derive(Serialize, Deserialize, Debug)]
         ///Domain specific properties for glTF nodes.
         pub struct Extension {
             ///Collection of unique property name - property value pairs.
-            pub properties: Vec<NodeProperty>,
+            pub properties: Vec<Property>,
             #[serde(rename = "propertyNames")]
             ///Collection of unique property names.
             pub property_names: Vec<String>,
@@ -43,7 +43,7 @@ pub mod gltf {
             pub property_values: Vec<String>,
             #[serde(default)]
             ///Collection of types - common sets of properties for many nodes.
-            pub types: Vec<NodeType>,
+            pub types: Vec<Type>,
         }
     }
     pub use extension::Extension;
