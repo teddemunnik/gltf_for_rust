@@ -7,7 +7,7 @@ use serde::Deserializer;
 use serde_json::Value;
 
 use crate::{ArrayType, Enum, FixedArrayType, ObjectPrototype, PropertyListBuilder, Type};
-use crate::schema2::{InstanceType, Schema, SchemaContext, SchemaResolver};
+use crate::schema::{InstanceType, Schema, SchemaContext, SchemaResolver};
 use crate::schema_uri::SchemaUri;
 
 pub fn handle_field(

@@ -3,7 +3,7 @@
 use convert_case::{Case, Casing};
 use proc_macro2::{Ident, Span};
 
-use crate::schema2::{Schema, SchemaContext};
+use crate::schema::{Schema, SchemaContext};
 
 /// Creates a canonical name of a schema object
 /// The canonical name will use UpperCamelCase formatting

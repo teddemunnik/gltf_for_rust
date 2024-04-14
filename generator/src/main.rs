@@ -18,11 +18,11 @@ use thiserror::Error;
 use crate::naming::{
     generate_enum_type_identifier, generate_option_identifier, generate_property_identifier,
 };
-use crate::schema2::{InstanceType, Schema, SchemaContext, SchemaResolver, SchemaStore, SchemaStoreMeta};
+use crate::schema::{InstanceType, Schema, SchemaContext, SchemaResolver, SchemaStore, SchemaStoreMeta};
 use crate::schema_uri::SchemaUri;
 
 mod naming;
-mod schema2;
+mod schema;
 mod schema_uri;
 mod type_deduction;
 
