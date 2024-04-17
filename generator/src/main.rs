@@ -212,19 +212,17 @@ impl PropertyListBuilder {
         resolver: &SchemaResolver,
         context: &SchemaContext,
         schema: &Schema,
-        open_types: &mut Vec<SchemaUri>,
-        closed_types: &HashSet<SchemaUri>,
     ) -> anyhow::Result<()> {
         // TODO: Ensure proper handling of compound schemas, right now we assume 'inheritance'
 
         // Read properties from reference schema
         if let Some((context, schema)) = schema.reference().and_then(|reference| resolver.resolve(&SchemaUri::from_str(reference), Some(context.uri()))) {
-            self.recursive_read_properties(resolver, &context, schema, open_types, closed_types)?;
+            self.recursive_read_properties(resolver, &context, schema)?;
         }
 
         // First read properties from 'base' schemas
         if let Ok((context, schema)) = schema.all_of(context).exactly_one() {
-            self.recursive_read_properties(resolver, &context, schema, open_types, closed_types)?;
+            self.recursive_read_properties(resolver, &context, schema)?;
         }
 
         // Then add our own properties
@@ -232,13 +230,11 @@ impl PropertyListBuilder {
             let property = self.find_or_add(name);
             if let Type::Any = property.ty {
                 property.ty =
-                    type_deduction::handle_field(resolver, &context, field_schema, open_types, closed_types)
+                    type_deduction::handle_field(resolver, &context, field_schema)
                         .with_context(|| {
                             format!("failed to deduce field type for property \"{name}\"")
                         })?;
             }
-
-            schedule_types(open_types, closed_types, &property.ty);
 
             if property.comment.is_none() {
                 property.comment = Self::read_description(resolver, &context, field_schema).map(String::from);
@@ -418,14 +414,12 @@ fn read_typed_object(
     resolver: &SchemaResolver,
     context: &SchemaContext,
     schema: &Schema,
-    open_list: &mut Vec<SchemaUri>,
-    closed_list: &HashSet<SchemaUri>,
 ) -> ObjectType {
     let name = naming::get_canonical_name(context, schema).unwrap();
     let comment = schema.description().map(|desc| desc.to_string());
     let mut properties = PropertyListBuilder::new();
     properties
-        .recursive_read_properties(resolver, context, schema, open_list, closed_list)
+        .recursive_read_properties(resolver, context, schema)
         .with_context(|| {
             format!(
                 "Failed to read properties for schema {}",
@@ -510,7 +504,13 @@ fn generate_rust(
     open_types: &mut Vec<SchemaUri>,
     closed_types: &HashSet<SchemaUri>,
 ) -> anyhow::Result<TokenStream> {
-    let object_type = read_typed_object(resolver, context, schema, open_types, closed_types);
+    let object_type = read_typed_object(resolver, context, schema);
+
+    // Schedule nested types for generation
+    for property in object_type.prototype.properties.iter() {
+        schedule_types(open_types, closed_types, &property.ty);
+    }
+
     generate_structure(&object_type.name, &object_type.prototype, resolver).with_context(|| format!("Failed to generate rust for schema {}", context.uri()))
 }
 
@@ -579,11 +579,18 @@ fn load_extensions(
 
             let comment = schema.description().map(|desc| desc.to_string());
             let mut properties = PropertyListBuilder::new();
-            properties.recursive_read_properties(&resolver, &context, schema, &mut open_types, &closed_types).with_context(|| format!("Failed to read properties for extension {extension_name} on base object {base_object_name}")).unwrap();
+
+            properties.recursive_read_properties(&resolver, &context, schema).with_context(|| format!("Failed to read properties for extension {extension_name} on base object {base_object_name}")).unwrap();
+
+            for property in properties.properties.iter() {
+                schedule_types(&mut open_types, &closed_types, &property.ty);
+            }
+
             let prototype = ObjectPrototype {
                 properties: properties.properties,
                 comment,
             };
+
 
             let structure = generate_structure("Extension", &prototype, &resolver).with_context(|| format!("Failed to generate structure {}", context.uri()))?;
             extension_module.push(quote! {
@@ -606,7 +613,6 @@ fn load_extensions(
             }
 
             let (context, schema) = resolver.resolve(&uri, None).unwrap();
-
             extension_module.push(generate_rust(&resolver, &context, &schema, &mut open_types, &closed_types)?);
         }
 
