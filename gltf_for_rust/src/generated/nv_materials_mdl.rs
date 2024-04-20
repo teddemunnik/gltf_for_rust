@@ -1,4 +1,74 @@
 #![allow(clippy::all, unused_imports)]
+mod gltf {
+    mod extension {
+        use serde::{Serialize, Deserialize};
+        use serde_json::{Map, Value};
+        #[derive(Serialize, Deserialize, Debug)]
+        ///glTF extension that enables using MDL materials.
+        pub struct Extension {
+            #[serde(default)]
+            ///JSON object with extension-specific objects.
+            pub extensions: Option<Map<String, Value>>,
+            #[serde(default)]
+            ///Application-specific data.
+            pub extras: Option<serde_json::Value>,
+            #[serde(rename = "bsdfMeasurements")]
+            #[serde(default)]
+            ///The list of all BSDF measurements.
+            pub bsdf_measurements: Vec<
+                crate::generated::nv_materials_mdl::BsdfMeasurement,
+            >,
+            #[serde(rename = "functionCalls")]
+            #[serde(default)]
+            ///The list of all function calls.
+            pub function_calls: Vec<crate::generated::nv_materials_mdl::FunctionCall>,
+            #[serde(default)]
+            ///The list of all MDL modules.
+            pub modules: Vec<crate::generated::nv_materials_mdl::Module>,
+        }
+        impl crate::GltfExtension for Extension {
+            fn extension_name() -> &'static str {
+                "NV_materials_mdl"
+            }
+        }
+        impl crate::GltfObject for Extension {
+            fn extensions(&self) -> &Option<Map<String, Value>> {
+                &self.extensions
+            }
+        }
+    }
+    pub use extension::Extension;
+}
+mod material {
+    mod extension {
+        use serde::{Serialize, Deserialize};
+        use serde_json::{Map, Value};
+        #[derive(Serialize, Deserialize, Debug)]
+        ///glTF extension that enables using MDL materials.
+        pub struct Extension {
+            #[serde(default)]
+            ///JSON object with extension-specific objects.
+            pub extensions: Option<Map<String, Value>>,
+            #[serde(default)]
+            ///Application-specific data.
+            pub extras: Option<serde_json::Value>,
+            #[serde(rename = "functionCall")]
+            ///The index of the MDL function call. The reference function call **MUST** represent the entry point to a function call graph and have the return type `material`.
+            pub function_call: i64,
+        }
+        impl crate::GltfExtension for Extension {
+            fn extension_name() -> &'static str {
+                "NV_materials_mdl"
+            }
+        }
+        impl crate::GltfObject for Extension {
+            fn extensions(&self) -> &Option<Map<String, Value>> {
+                &self.extensions
+            }
+        }
+    }
+    pub use extension::Extension;
+}
 mod bsdf_measurement {
     use serde::{Serialize, Deserialize};
     use serde_json::{Map, Value};
@@ -147,70 +217,6 @@ mod function_call_type {
     }
 }
 pub use function_call_type::FunctionCallType;
-mod gltf_nv_materials_mdl {
-    use serde::{Serialize, Deserialize};
-    use serde_json::{Map, Value};
-    #[derive(Serialize, Deserialize, Debug)]
-    ///glTF extension that enables using MDL materials.
-    pub struct GltfNvMaterialsMdl {
-        #[serde(default)]
-        ///JSON object with extension-specific objects.
-        pub extensions: Option<Map<String, Value>>,
-        #[serde(default)]
-        ///Application-specific data.
-        pub extras: Option<serde_json::Value>,
-        #[serde(rename = "bsdfMeasurements")]
-        #[serde(default)]
-        ///The list of all BSDF measurements.
-        pub bsdf_measurements: Vec<crate::generated::nv_materials_mdl::BsdfMeasurement>,
-        #[serde(rename = "functionCalls")]
-        #[serde(default)]
-        ///The list of all function calls.
-        pub function_calls: Vec<crate::generated::nv_materials_mdl::FunctionCall>,
-        #[serde(default)]
-        ///The list of all MDL modules.
-        pub modules: Vec<crate::generated::nv_materials_mdl::Module>,
-    }
-    impl crate::GltfExtension for GltfNvMaterialsMdl {
-        fn extension_name() -> &'static str {
-            "NV_materials_mdl"
-        }
-    }
-    impl crate::GltfObject for GltfNvMaterialsMdl {
-        fn extensions(&self) -> &Option<Map<String, Value>> {
-            &self.extensions
-        }
-    }
-}
-pub use gltf_nv_materials_mdl::GltfNvMaterialsMdl;
-mod material_nv_materials_mdl {
-    use serde::{Serialize, Deserialize};
-    use serde_json::{Map, Value};
-    #[derive(Serialize, Deserialize, Debug)]
-    ///glTF extension that enables using MDL materials.
-    pub struct MaterialNvMaterialsMdl {
-        #[serde(default)]
-        ///JSON object with extension-specific objects.
-        pub extensions: Option<Map<String, Value>>,
-        #[serde(default)]
-        ///Application-specific data.
-        pub extras: Option<serde_json::Value>,
-        #[serde(rename = "functionCall")]
-        ///The index of the MDL function call. The reference function call **MUST** represent the entry point to a function call graph and have the return type `material`.
-        pub function_call: i64,
-    }
-    impl crate::GltfExtension for MaterialNvMaterialsMdl {
-        fn extension_name() -> &'static str {
-            "NV_materials_mdl"
-        }
-    }
-    impl crate::GltfObject for MaterialNvMaterialsMdl {
-        fn extensions(&self) -> &Option<Map<String, Value>> {
-            &self.extensions
-        }
-    }
-}
-pub use material_nv_materials_mdl::MaterialNvMaterialsMdl;
 mod module {
     use serde::{Serialize, Deserialize};
     use serde_json::{Map, Value};
