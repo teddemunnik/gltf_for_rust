@@ -1,4 +1,52 @@
 #![allow(clippy::all, unused_imports)]
+mod gltf_khr_materials_variants {
+    use serde::{Serialize, Deserialize};
+    use serde_json::{Map, Value};
+    mod variant {
+        use serde::{Serialize, Deserialize};
+        use serde_json::{Map, Value};
+        #[derive(Serialize, Deserialize, Debug)]
+        ///An object defining a valid material variant
+        pub struct Variant {
+            #[serde(default)]
+            ///JSON object with extension-specific objects.
+            pub extensions: Option<Map<String, Value>>,
+            #[serde(default)]
+            ///Application-specific data.
+            pub extras: Option<serde_json::Value>,
+            ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
+            pub name: String,
+        }
+        impl crate::GltfObject for Variant {
+            fn extensions(&self) -> &Option<Map<String, Value>> {
+                &self.extensions
+            }
+        }
+    }
+    pub use variant::Variant;
+    #[derive(Serialize, Deserialize, Debug)]
+    ///glTF extension that defines a material variations for mesh primitives
+    pub struct GltfKhrMaterialsVariants {
+        #[serde(default)]
+        ///JSON object with extension-specific objects.
+        pub extensions: Option<Map<String, Value>>,
+        #[serde(default)]
+        ///Application-specific data.
+        pub extras: Option<serde_json::Value>,
+        pub variants: Vec<Variant>,
+    }
+    impl crate::GltfExtension for GltfKhrMaterialsVariants {
+        fn extension_name() -> &'static str {
+            "KHR_materials_variants"
+        }
+    }
+    impl crate::GltfObject for GltfKhrMaterialsVariants {
+        fn extensions(&self) -> &Option<Map<String, Value>> {
+            &self.extensions
+        }
+    }
+}
+pub use gltf_khr_materials_variants::GltfKhrMaterialsVariants;
 mod mesh_primitive_khr_materials_variants {
     use serde::{Serialize, Deserialize};
     use serde_json::{Map, Value};
@@ -51,51 +99,3 @@ mod mesh_primitive_khr_materials_variants {
     }
 }
 pub use mesh_primitive_khr_materials_variants::MeshPrimitiveKhrMaterialsVariants;
-mod gltf_khr_materials_variants {
-    use serde::{Serialize, Deserialize};
-    use serde_json::{Map, Value};
-    mod variant {
-        use serde::{Serialize, Deserialize};
-        use serde_json::{Map, Value};
-        #[derive(Serialize, Deserialize, Debug)]
-        ///An object defining a valid material variant
-        pub struct Variant {
-            #[serde(default)]
-            ///JSON object with extension-specific objects.
-            pub extensions: Option<Map<String, Value>>,
-            #[serde(default)]
-            ///Application-specific data.
-            pub extras: Option<serde_json::Value>,
-            ///The user-defined name of this object.  This is not necessarily unique, e.g., an accessor and a buffer could have the same name, or two accessors could even have the same name.
-            pub name: String,
-        }
-        impl crate::GltfObject for Variant {
-            fn extensions(&self) -> &Option<Map<String, Value>> {
-                &self.extensions
-            }
-        }
-    }
-    pub use variant::Variant;
-    #[derive(Serialize, Deserialize, Debug)]
-    ///glTF extension that defines a material variations for mesh primitives
-    pub struct GltfKhrMaterialsVariants {
-        #[serde(default)]
-        ///JSON object with extension-specific objects.
-        pub extensions: Option<Map<String, Value>>,
-        #[serde(default)]
-        ///Application-specific data.
-        pub extras: Option<serde_json::Value>,
-        pub variants: Vec<Variant>,
-    }
-    impl crate::GltfExtension for GltfKhrMaterialsVariants {
-        fn extension_name() -> &'static str {
-            "KHR_materials_variants"
-        }
-    }
-    impl crate::GltfObject for GltfKhrMaterialsVariants {
-        fn extensions(&self) -> &Option<Map<String, Value>> {
-            &self.extensions
-        }
-    }
-}
-pub use gltf_khr_materials_variants::GltfKhrMaterialsVariants;

@@ -1,40 +1,4 @@
 #![allow(clippy::all, unused_imports)]
-mod node_griffel_bim_data {
-    use serde::{Serialize, Deserialize};
-    use serde_json::{Map, Value};
-    #[derive(Serialize, Deserialize, Debug)]
-    ///References type and instance properties of the node and/or buffer where those properties can be found by node ID.
-    pub struct NodeGriffelBimData {
-        #[serde(default)]
-        ///JSON object with extension-specific objects.
-        pub extensions: Option<Map<String, Value>>,
-        #[serde(default)]
-        ///Application-specific data.
-        pub extras: Option<serde_json::Value>,
-        #[serde(rename = "bufferView")]
-        #[serde(default)]
-        ///Index of the buffer view which points to the buffer with the data for this node.
-        pub buffer_view: Option<i64>,
-        #[serde(default)]
-        ///Collection of indices which point to corresponding instance properties of the node. (Instance properties are unique to the node. They override the same type properties.)
-        pub properties: Vec<i64>,
-        #[serde(rename = "type")]
-        #[serde(default)]
-        ///Index of a type in the root level collection. (Type is a set of properties which are common for many nodes.)
-        pub ty: Option<i64>,
-    }
-    impl crate::GltfExtension for NodeGriffelBimData {
-        fn extension_name() -> &'static str {
-            "GRIFFEL_bim_data"
-        }
-    }
-    impl crate::GltfObject for NodeGriffelBimData {
-        fn extensions(&self) -> &Option<Map<String, Value>> {
-            &self.extensions
-        }
-    }
-}
-pub use node_griffel_bim_data::NodeGriffelBimData;
 mod gltf_griffel_bim_data {
     use serde::{Serialize, Deserialize};
     use serde_json::{Map, Value};
@@ -87,3 +51,39 @@ mod gltf_griffel_bim_data {
     }
 }
 pub use gltf_griffel_bim_data::GltfGriffelBimData;
+mod node_griffel_bim_data {
+    use serde::{Serialize, Deserialize};
+    use serde_json::{Map, Value};
+    #[derive(Serialize, Deserialize, Debug)]
+    ///References type and instance properties of the node and/or buffer where those properties can be found by node ID.
+    pub struct NodeGriffelBimData {
+        #[serde(default)]
+        ///JSON object with extension-specific objects.
+        pub extensions: Option<Map<String, Value>>,
+        #[serde(default)]
+        ///Application-specific data.
+        pub extras: Option<serde_json::Value>,
+        #[serde(rename = "bufferView")]
+        #[serde(default)]
+        ///Index of the buffer view which points to the buffer with the data for this node.
+        pub buffer_view: Option<i64>,
+        #[serde(default)]
+        ///Collection of indices which point to corresponding instance properties of the node. (Instance properties are unique to the node. They override the same type properties.)
+        pub properties: Vec<i64>,
+        #[serde(rename = "type")]
+        #[serde(default)]
+        ///Index of a type in the root level collection. (Type is a set of properties which are common for many nodes.)
+        pub ty: Option<i64>,
+    }
+    impl crate::GltfExtension for NodeGriffelBimData {
+        fn extension_name() -> &'static str {
+            "GRIFFEL_bim_data"
+        }
+    }
+    impl crate::GltfObject for NodeGriffelBimData {
+        fn extensions(&self) -> &Option<Map<String, Value>> {
+            &self.extensions
+        }
+    }
+}
+pub use node_griffel_bim_data::NodeGriffelBimData;

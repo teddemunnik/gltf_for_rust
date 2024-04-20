@@ -237,7 +237,7 @@ impl<'a> ModuleBuilder<'a> {
     fn visit_type(&mut self, ty: &Type) {
         match ty {
             Type::TypedObject(schema) => {
-                if self.types.contains_key(schema) || self.open_list.iter().find(|item| item.schema.eq(schema)).is_some() {
+                if self.types.contains_key(schema) || self.open_list.iter().any(|item| item.schema.eq(schema)) {
                     return;
                 }
 
@@ -257,7 +257,6 @@ impl<'a> ModuleBuilder<'a> {
             let (context, schema) = self.resolver.resolve(&ty.schema, None).unwrap();
 
             // Create the object prototype
-            let comment = schema.description().map(|desc| desc.to_string());
             let object_type = read_typed_object(self.resolver, &context, schema);
 
             // Schedule nested types for generation
@@ -274,7 +273,7 @@ impl<'a> ModuleBuilder<'a> {
     }
 
     pub fn generate(&self) -> anyhow::Result<()> {
-        let types: Vec<TokenStream> = self.types.iter().map(|(schema, ty)| {
+        let types: Vec<TokenStream> = self.types.values().map(|ty| {
             generate_structure(&ty.name, &ty.prototype, ty.extension.as_deref(), self.resolver)
         }).collect::<anyhow::Result<Vec<TokenStream>>>()?;
 
