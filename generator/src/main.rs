@@ -7,7 +7,6 @@ use anyhow::Context;
 use convert_case::{Case, Casing};
 use itertools::Itertools;
 use serde_json::Value;
-use thiserror::Error;
 
 use crate::module_builder::{ModuleBuilder, TypeDescription};
 use crate::schema::{Schema, SchemaContext, SchemaResolver, SchemaStore, SchemaStoreMeta};
@@ -19,9 +18,6 @@ mod schema;
 mod schema_uri;
 mod type_deduction;
 mod codegen;
-
-#[derive(Debug, Error)]
-enum MyError {}
 
 pub struct Enum {
     options: Vec<String>,
