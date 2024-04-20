@@ -22,7 +22,7 @@ pub fn get_canonical_name(context: &SchemaContext, schema: &Schema) -> Option<St
             return Some(
                 no_suffix
                     .replace("glTF", "gltf")
-                    .replace(".", " ")
+                    .replace('.', " ")
                     .to_case(Case::UpperCamel),
             );
         }
@@ -36,7 +36,7 @@ pub fn get_canonical_name(context: &SchemaContext, schema: &Schema) -> Option<St
         let prefix_end = title.find(' ');
         if let Some(prefix_end) = prefix_end {
             if title[0..prefix_end].starts_with("khr_") {
-                return Some(String::from(title[(prefix_end + 1)..].to_string()));
+                return Some(title[(prefix_end + 1)..].to_string());
             }
         }
         Some(title.clone())
@@ -64,8 +64,7 @@ pub fn generate_property_identifier(name: &str) -> Ident {
 pub fn generate_option_identifier(name: &str) -> Ident {
     Ident::new(
         &name
-            .replace('/', " ")
-            .replace('.', " ")
+            .replace(['/', '.'], " ")
             .to_case(Case::UpperCamel),
         Span::call_site(),
     )

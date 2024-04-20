@@ -5,8 +5,7 @@ use std::fs::{File, read_dir};
 use std::io::{BufReader, ErrorKind};
 use std::path::PathBuf;
 
-use serde::{Deserialize, Deserializer, Serialize};
-use serde::de::{SeqAccess, Visitor};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
@@ -16,12 +15,6 @@ use crate::schema_uri::SchemaUri;
 pub struct RootSchema {
     #[serde(flatten)]
     schema: Schema,
-}
-
-impl RootSchema {
-    pub fn schema(&self) -> &Schema {
-        &self.schema
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -36,7 +29,7 @@ impl SchemaContext {
 
         match &mut uri.fragment {
             Some(fragment) => {
-                fragment.push_str("/");
+                fragment.push('/');
                 fragment.push_str(path);
             }
             None => uri.fragment = Some(String::from(path)),
@@ -162,7 +155,7 @@ impl Schema {
     pub fn description(&self) -> Option<&str> {
         match self {
             Schema::Object(object) => object.metadata.description.as_deref(),
-            serde_json => None,
+            _ => None,
         }
     }
 
@@ -222,7 +215,7 @@ impl Schema {
     ) -> Option<(SchemaContext, &Schema)> {
         match self {
             Schema::Object(object) => Some((
-                context.with_subpath("additional_properties".into()),
+                context.with_subpath("additional_properties"),
                 &object.object_rules.additional_properties
             )),
             _ => None,
@@ -253,7 +246,7 @@ impl Schema {
     pub fn items(&self, context: &SchemaContext) -> Option<(SchemaContext, &Schema)> {
         match self {
             Schema::Object(object) => Some((
-                context.with_subpath("items".into()),
+                context.with_subpath("items"),
                 &object.array_rules.items,
             )),
             _ => None,
@@ -289,8 +282,8 @@ pub struct SubSchemaIterator<'a> {
 impl<'a> Iterator for SubSchemaIterator<'a> {
     type Item = (SchemaContext, &'a Schema);
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|(index, schema)| {
-            let mut context = self.context.clone();
+        self.inner.next().map(|(_, schema)| {
+            let context = self.context.clone();
             //context.uri.instance_path.push(index.to_string());
             (context, schema)
         })
@@ -315,7 +308,7 @@ impl<'a> Iterator for PropertiesIterator<'a> {
     type Item = (SchemaContext, &'a str, &'a Schema);
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|(key, value)| {
-            let mut context = self.context.with_subpath(&format!("properties/{key}"));
+            let context = self.context.with_subpath(&format!("properties/{key}"));
             (context, key.as_ref(), value)
         })
     }
@@ -350,7 +343,6 @@ pub enum SchemaStoreMeta {
 
 pub struct SchemaStore {
     meta: SchemaStoreMeta,
-    folder: String,
     map: BTreeMap<String, RootSchema>,
 }
 
@@ -365,12 +357,11 @@ pub enum SchemaError {
 
 impl SchemaStore {
     pub fn read(meta: SchemaStoreMeta, folder: &str) -> Result<SchemaStore, SchemaError> {
-        let dir = match read_dir(&folder) {
+        let dir = match read_dir(folder) {
             Ok(dir) => dir,
             Err(e) if e.kind() == ErrorKind::NotFound => {
                 return Ok(SchemaStore {
                     meta,
-                    folder: folder.to_string(),
                     map: BTreeMap::new(),
                 });
             }
@@ -407,7 +398,6 @@ impl SchemaStore {
 
         Ok(SchemaStore {
             meta,
-            folder: folder.to_string(),
             map,
         })
     }
@@ -450,7 +440,7 @@ impl<'a> SchemaResolver<'a> {
         };
 
         // Find the schema store containing the URI
-        let (store, schema) = match self.order.iter().map(|store| store.map.get(schema_path).map(|schema| (*store, schema))).flatten().next() {
+        let (store, schema) = match self.order.iter().filter_map(|store| store.map.get(schema_path).map(|schema| (*store, schema))).next() {
             Some(tuple) => tuple,
             None => return None,
         };

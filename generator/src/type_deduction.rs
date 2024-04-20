@@ -1,7 +1,5 @@
 use anyhow::Context;
 use itertools::Itertools;
-use serde::de::{EnumAccess, SeqAccess, Visitor};
-use serde::Deserializer;
 use serde_json::Value;
 
 use crate::{ArrayType, Enum, FixedArrayType, ObjectPrototype, PropertyListBuilder, Type};
@@ -38,7 +36,7 @@ pub fn handle_field(
 
 fn try_match_string_enum(context: &SchemaContext, schema: &Schema) -> Option<Enum> {
     let mut options = Vec::new();
-    for (context, option) in schema.any_of(context) {
+    for (_, option) in schema.any_of(context) {
         let is_string_constant = match option.const_value() {
             Some(Value::String(option)) => {
                 options.push(option.clone());
@@ -62,7 +60,7 @@ fn try_match_string_enum(context: &SchemaContext, schema: &Schema) -> Option<Enu
 
 fn try_match_int_enum(context: &SchemaContext, schema: &Schema) -> Option<()> {
     let mut options = Vec::new();
-    for (context, option) in schema.any_of(context) {
+    for (_, option) in schema.any_of(context) {
         let is_number_constant = match option.const_value() {
             Some(Value::Number(option)) => {
                 options.push(option.clone());
@@ -102,7 +100,7 @@ fn handle_object_type(
     let comment = schema.description().map(|desc| desc.to_string());
     let mut properties = PropertyListBuilder::new();
     properties
-        .recursive_read_properties(resolver, &context, schema)
+        .recursive_read_properties(resolver, context, schema)
         .context("Failed to read properties for embedded object")?;
 
     let name = None; // TODO;

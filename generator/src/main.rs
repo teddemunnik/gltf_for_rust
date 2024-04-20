@@ -1,9 +1,7 @@
-use std::{fs, fs::File, io::BufWriter};
-use std::collections::{HashMap, HashSet};
-use std::error::Error;
+use std::{fs::File, io::BufWriter};
+use std::collections::HashMap;
 use std::fs::read_dir;
 use std::io::Write;
-use std::path::PathBuf;
 use std::vec::Vec;
 
 use anyhow::Context;
@@ -15,7 +13,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::module_builder::{ModuleBuilder, TypeDescription};
-use crate::schema::{InstanceType, Schema, SchemaContext, SchemaResolver, SchemaStore, SchemaStoreMeta};
+use crate::schema::{Schema, SchemaContext, SchemaResolver, SchemaStore, SchemaStoreMeta};
 use crate::schema_uri::SchemaUri;
 
 mod naming;
@@ -35,17 +33,7 @@ fn plural_to_singular(maybe_plural: &str) -> String {
 }
 
 #[derive(Debug, Error)]
-enum MyError {
-    #[error("Failed to open schema {path}: {inner}")]
-    FailedToOpenSchema {
-        path: PathBuf,
-        inner: Box<dyn std::error::Error>,
-    },
-    #[error("Unhandled instance type")]
-    UnhandledInstanceType(Vec<InstanceType>),
-    #[error("Unhandled array item type")]
-    UnhandledArrayItemType(Option<Vec<Schema>>),
-}
+enum MyError {}
 
 pub struct Enum {
     options: Vec<String>,
@@ -91,7 +79,7 @@ pub struct ObjectType {
 fn generate_named_type_path(resolver: &SchemaResolver, uri: &SchemaUri) -> TokenStream {
     let (context, schema) = resolver.resolve(uri, None).unwrap();
 
-    let name = naming::get_canonical_name(&context, &schema).unwrap();
+    let name = naming::get_canonical_name(&context, schema).unwrap();
     let type_name = Ident::new(&name, Span::call_site());
 
     match context.meta() {
@@ -125,7 +113,7 @@ fn generate_rust_type(resolver: &SchemaResolver, ty: &Type, field_name: &String)
         }
         Type::TypedObject(uri) => generate_named_type_path(resolver, uri),
         Type::MapOfObjects => quote! { Map<String, Value> },
-        Type::EmbeddedObject { name, prototype } => {
+        Type::EmbeddedObject { name, prototype: _ } => {
             let ident = Ident::new(
                 &name
                     .clone()
@@ -135,20 +123,6 @@ fn generate_rust_type(resolver: &SchemaResolver, ty: &Type, field_name: &String)
             );
             quote! { #ident }
         }
-    }
-}
-
-fn schedule_types(open_types: &mut Vec<SchemaUri>, closed_types: &HashSet<SchemaUri>, ty: &Type) {
-    match ty {
-        Type::Array(array_type) => {
-            schedule_types(open_types, closed_types, array_type.item.as_ref())
-        }
-        Type::TypedObject(uri) => {
-            if !closed_types.contains(uri) && !open_types.contains(uri) {
-                open_types.push(uri.clone());
-            }
-        }
-        _ => (),
     }
 }
 
@@ -250,41 +224,6 @@ impl PropertyListBuilder {
     }
 }
 
-fn generate_default_value_token(ty: &Type, default: &Value, field_name: &String) -> anyhow::Result<TokenStream> {
-    Ok(match ty {
-        Type::Any => unimplemented!(),
-        Type::Array(_) => quote! {{ Vec::default(); }},
-        Type::FixedArray(array) => {
-            let array_items: Vec<TokenStream> = default
-                .as_array()
-                .context("Expected the default value to be an array")?.iter().map(|value| generate_default_value_token(&array.item, value, field_name)).try_collect()?;
-
-
-            quote! { [ #(#array_items),* ]}
-        }
-        Type::Boolean => {
-            let value = default.as_bool().context("Expected the default value to be a bool")?;
-            quote! { #value }
-        }
-        Type::Enum(_) => {
-            let ident = Ident::new(&field_name.to_case(Case::UpperCamel), Span::call_site());
-            quote! { #ident::default() }
-        }
-        Type::Integer => {
-            let integer: i64 = default.as_i64().context("Unexpected the default to be an integer")?;
-            quote! { #integer }
-        }
-        Type::MapOfObjects => quote! { Map<String, Value>::default() },
-        Type::Number => {
-            let number: f64 = default.as_f64().unwrap();
-            quote! { #number }
-        }
-        Type::String => unimplemented!(),
-        Type::TypedObject(_) => unimplemented!(),
-        Type::EmbeddedObject { name, prototype } => unimplemented!(),
-    })
-}
-
 /// Writes a rust type into a unique module with helper functions and type surrounding it
 struct RustTypeWriter {
     embedded_types: Vec<TokenStream>,
@@ -359,7 +298,7 @@ fn load_extensions(
         let extension_schema_suffix = format!("{}.schema.json", &extension_name);
 
         let mut extension_schema_store = SchemaStore::read(SchemaStoreMeta::Extension(extension_name.clone()), &schemas_path.to_string_lossy()).unwrap();
-        let resolver = SchemaResolver::extension(&specification_schema, &extension_schema_store);
+        let resolver = SchemaResolver::extension(specification_schema, &extension_schema_store);
 
         let mut specification_builder = ModuleBuilder::new(generated_path, &extension_name, &resolver, &extension_schema_store);
 
@@ -394,28 +333,6 @@ fn load_extensions(
     }
 
     Ok(())
-}
-
-fn ensure_empty_dir(path: &str) {
-    match read_dir(path) {
-        Ok(dir) => {
-            // Directory was found, remove any entries if they exist
-            for entry in dir.flatten() {
-                let path = entry.path();
-
-                if path.is_dir() {
-                    fs::remove_dir_all(path).expect("Failed to remove a dir");
-                } else {
-                    fs::remove_file(path).expect("Failed to remove a file");
-                }
-            }
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            // Directory was not found, create it
-            fs::create_dir(path).unwrap();
-        }
-        Err(e) => panic!("Unhandled error {e}"),
-    }
 }
 
 struct GeneratedManifest {
