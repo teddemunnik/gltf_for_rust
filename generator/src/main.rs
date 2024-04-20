@@ -2,13 +2,11 @@ use std::collections::HashMap;
 use std::fs::read_dir;
 use std::io::Write;
 use std::vec::Vec;
-use std::{fs::File, io::BufWriter};
 
 use anyhow::Context;
 use convert_case::{Case, Casing};
 use itertools::Itertools;
-use proc_macro2::{Ident, Span, TokenStream};
-use quote::quote;
+use proc_macro2::TokenStream;
 use serde_json::Value;
 use thiserror::Error;
 
@@ -21,6 +19,7 @@ mod naming;
 mod schema;
 mod schema_uri;
 mod type_deduction;
+mod codegen;
 
 fn plural_to_singular(maybe_plural: &str) -> String {
     if let Some(singular) = maybe_plural.strip_suffix("ies") {
@@ -76,55 +75,6 @@ pub struct ObjectType {
     pub prototype: ObjectPrototype,
 }
 
-fn generate_named_type_path(resolver: &SchemaResolver, uri: &SchemaUri) -> TokenStream {
-    let (context, schema) = resolver.resolve(uri, None).unwrap();
-
-    let name = naming::get_canonical_name(&context, schema).unwrap();
-    let type_name = Ident::new(&name, Span::call_site());
-
-    match context.meta() {
-        SchemaStoreMeta::Core => quote! { crate::generated::gltf::#type_name },
-        SchemaStoreMeta::Extension(extension) => {
-            let ident = naming::generate_base_module_identifier(extension);
-            quote! { crate::generated::#ident::#type_name}
-        }
-    }
-}
-
-fn generate_rust_type(resolver: &SchemaResolver, ty: &Type, field_name: &String) -> TokenStream {
-    match ty {
-        Type::Any => quote! { serde_json::Value },
-        Type::Array(array_type) => {
-            let item_rust_type = generate_rust_type(resolver, &array_type.item, field_name);
-            quote! { Vec::< #item_rust_type > }
-        }
-        Type::FixedArray(array_type) => {
-            let fixed_length = array_type.length as usize;
-            let rust_item_type = generate_rust_type(resolver, &array_type.item, field_name);
-            quote! { [#rust_item_type; #fixed_length ]}
-        }
-        Type::Boolean => quote! { bool },
-        Type::Integer => quote! { i64 },
-        Type::Number => quote! { f64 },
-        Type::String => quote! { String },
-        Type::Enum(_) => {
-            let ident = Ident::new(&field_name.to_case(Case::UpperCamel), Span::call_site());
-            quote! { #ident }
-        }
-        Type::TypedObject(uri) => generate_named_type_path(resolver, uri),
-        Type::MapOfObjects => quote! { Map<String, Value> },
-        Type::EmbeddedObject { name, prototype: _ } => {
-            let ident = Ident::new(
-                &name
-                    .clone()
-                    .unwrap_or_else(|| plural_to_singular(field_name.as_str()))
-                    .to_case(Case::UpperCamel),
-                Span::call_site(),
-            );
-            quote! { #ident }
-        }
-    }
-}
 
 pub struct Property {
     pub name: String,
@@ -303,7 +253,7 @@ fn load_extensions(
             SchemaStoreMeta::Extension(extension_name.clone()),
             &schemas_path.to_string_lossy(),
         )
-        .unwrap();
+            .unwrap();
         let resolver = SchemaResolver::extension(specification_schema, &extension_schema_store);
 
         let mut specification_builder = ModuleBuilder::new(
@@ -361,28 +311,6 @@ impl GeneratedManifest {
     }
 }
 
-fn write_root_module(generated_path: &str, generated_manifest: &GeneratedManifest) {
-    let output = File::create(format!("{generated_path}/mod.rs")).unwrap();
-    let mut writer = BufWriter::new(output);
-
-    let extension_modules: Vec<TokenStream> = generated_manifest
-        .extension_modules
-        .iter()
-        .map(|module_name| {
-            let ident = Ident::new(module_name, Span::call_site());
-            quote! { pub mod #ident; }
-        })
-        .collect();
-
-    let rust_file: syn::File = syn::parse2(quote! {
-        pub mod gltf;
-        #(#extension_modules)*
-    })
-    .unwrap();
-
-    write!(writer, "{}", prettyplease::unparse(&rust_file)).unwrap();
-}
-
 fn main() {
     const SPECIFICATION_FOLDER: &str = "vendor/gltf/specification/2.0/schema";
     const KHRONOS_EXTENSIONS_FOLDER: &str = "vendor/gltf/extensions/2.0/Khronos";
@@ -417,7 +345,7 @@ fn main() {
         OUTPUT_BASE,
         &specification_schema_store,
     )
-    .unwrap();
+        .unwrap();
 
     load_extensions(
         &mut generated_manifest,
@@ -425,7 +353,7 @@ fn main() {
         OUTPUT_BASE,
         &specification_schema_store,
     )
-    .unwrap();
+        .unwrap();
 
-    write_root_module(OUTPUT_BASE, &generated_manifest);
+    codegen::write_root_module(OUTPUT_BASE, &generated_manifest);
 }
