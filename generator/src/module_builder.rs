@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 
-use crate::{codegen, ObjectPrototype, read_typed_object, Type};
-use crate::schema::{SchemaResolver, SchemaStore};
+use anyhow::Context;
+
+use crate::{codegen, naming, ObjectPrototype, ObjectType, PropertyListBuilder, Type};
+use crate::schema::{Schema, SchemaContext, SchemaResolver, SchemaStore};
 use crate::schema_uri::SchemaUri;
 
 pub struct TypeDescription {
@@ -25,6 +27,27 @@ pub struct ModuleBuilder<'a> {
     pub resolver: &'a SchemaResolver<'a>,
 }
 
+
+fn read_typed_object(
+    resolver: &SchemaResolver,
+    context: &SchemaContext,
+    schema: &Schema,
+) -> ObjectType {
+    let name = naming::get_canonical_name(context, schema).unwrap();
+    let comment = schema.description().map(|desc| desc.to_string());
+    let mut properties = PropertyListBuilder::new();
+    properties
+        .recursive_read_properties(resolver, context, schema)
+        .with_context(|| format!("Failed to read properties for schema {}", context.uri()))
+        .unwrap();
+    ObjectType {
+        name,
+        prototype: ObjectPrototype {
+            comment,
+            properties: properties.properties,
+        },
+    }
+}
 
 impl<'a> ModuleBuilder<'a> {
     pub fn new(

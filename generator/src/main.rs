@@ -6,7 +6,6 @@ use std::vec::Vec;
 use anyhow::Context;
 use convert_case::{Case, Casing};
 use itertools::Itertools;
-use proc_macro2::TokenStream;
 use serde_json::Value;
 use thiserror::Error;
 
@@ -20,16 +19,6 @@ mod schema;
 mod schema_uri;
 mod type_deduction;
 mod codegen;
-
-fn plural_to_singular(maybe_plural: &str) -> String {
-    if let Some(singular) = maybe_plural.strip_suffix("ies") {
-        format!("{}y", singular)
-    } else if let Some(singular) = maybe_plural.strip_suffix('s') {
-        String::from(singular)
-    } else {
-        String::from(maybe_plural)
-    }
-}
 
 #[derive(Debug, Error)]
 enum MyError {}
@@ -182,43 +171,6 @@ impl PropertyListBuilder {
     }
 }
 
-/// Writes a rust type into a unique module with helper functions and type surrounding it
-struct RustTypeWriter {
-    embedded_types: Vec<TokenStream>,
-    default_declarations: Vec<TokenStream>,
-}
-
-impl RustTypeWriter {
-    fn new() -> Self {
-        Self {
-            embedded_types: Vec::new(),
-            default_declarations: Vec::new(),
-        }
-    }
-}
-
-pub fn read_typed_object(
-    resolver: &SchemaResolver,
-    context: &SchemaContext,
-    schema: &Schema,
-) -> ObjectType {
-    let name = naming::get_canonical_name(context, schema).unwrap();
-    let comment = schema.description().map(|desc| desc.to_string());
-    let mut properties = PropertyListBuilder::new();
-    properties
-        .recursive_read_properties(resolver, context, schema)
-        .with_context(|| format!("Failed to read properties for schema {}", context.uri()))
-        .unwrap();
-    ObjectType {
-        name,
-        prototype: ObjectPrototype {
-            comment,
-            properties: properties.properties,
-        },
-    }
-}
-
-#[allow(unused)]
 fn load_extensions(
     generated_manifest: &mut GeneratedManifest,
     extensions_path: &str,

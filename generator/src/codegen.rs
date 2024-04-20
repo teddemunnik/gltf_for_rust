@@ -8,11 +8,36 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use serde_json::Value;
 
-use crate::{Enum, GeneratedManifest, naming, ObjectPrototype, plural_to_singular, Property, RustTypeWriter, Type};
+use crate::{Enum, GeneratedManifest, naming, ObjectPrototype, Property, Type};
 use crate::module_builder::ModuleBuilder;
 use crate::naming::{generate_enum_type_identifier, generate_option_identifier, generate_property_identifier};
 use crate::schema::{SchemaResolver, SchemaStoreMeta};
 use crate::schema_uri::SchemaUri;
+
+fn plural_to_singular(maybe_plural: &str) -> String {
+    if let Some(singular) = maybe_plural.strip_suffix("ies") {
+        format!("{}y", singular)
+    } else if let Some(singular) = maybe_plural.strip_suffix('s') {
+        String::from(singular)
+    } else {
+        String::from(maybe_plural)
+    }
+}
+
+/// Writes a rust type into a unique module with helper functions and type surrounding it
+struct RustTypeWriter {
+    embedded_types: Vec<TokenStream>,
+    default_declarations: Vec<TokenStream>,
+}
+
+impl RustTypeWriter {
+    fn new() -> Self {
+        Self {
+            embedded_types: Vec::new(),
+            default_declarations: Vec::new(),
+        }
+    }
+}
 
 fn write_embedded_enum(
     property_name: &str,
