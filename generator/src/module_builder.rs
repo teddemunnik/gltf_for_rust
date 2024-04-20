@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write;
@@ -9,15 +9,15 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use serde_json::Value;
 
+use crate::{
+    Enum, generate_rust_type, naming, ObjectPrototype, plural_to_singular, Property,
+    read_typed_object, RustTypeWriter, Type,
+};
 use crate::naming::{
     generate_enum_type_identifier, generate_option_identifier, generate_property_identifier,
 };
 use crate::schema::{SchemaResolver, SchemaStore};
 use crate::schema_uri::SchemaUri;
-use crate::{
-    generate_rust_type, naming, plural_to_singular, read_typed_object, Enum, ObjectPrototype,
-    Property, RustTypeWriter, Type,
-};
 
 pub struct TypeDescription {
     pub schema: SchemaUri,
@@ -34,7 +34,7 @@ pub struct ResolvedType {
 pub struct ModuleBuilder<'a> {
     output_base: String,
     name: String,
-    types: HashMap<SchemaUri, ResolvedType>,
+    types: BTreeMap<SchemaUri, ResolvedType>,
     open_list: Vec<TypeDescription>,
     store: &'a SchemaStore,
     resolver: &'a SchemaResolver<'a>,
@@ -91,12 +91,12 @@ fn write_embedded_type(
                 None,
                 resolver,
             )
-            .with_context(|| {
-                format!(
-                    "Failed to generate embedded type {}",
-                    name.as_ref().unwrap()
-                )
-            })?,
+                .with_context(|| {
+                    format!(
+                        "Failed to generate embedded type {}",
+                        name.as_ref().unwrap()
+                    )
+                })?,
         ),
         Type::Enum(enumeration) => Some(write_embedded_enum(property_name, enumeration, default)),
         _ => None,
@@ -112,10 +112,10 @@ fn write_property(
         // Remove the Option for optional Vec's with a minimum length of 1
         // This way we can guarantee this invariant by telling serde to not serialize zero length vecs.
         (Type::Array(array_type), true)
-            if array_type.min_length.is_some() && array_type.min_length.unwrap() == 1 =>
-        {
-            generate_rust_type(resolver, &property.ty, &property.name)
-        }
+        if array_type.min_length.is_some() && array_type.min_length.unwrap() == 1 =>
+            {
+                generate_rust_type(resolver, &property.ty, &property.name)
+            }
 
         (_, true) => {
             let rust_type: TokenStream = generate_rust_type(resolver, &property.ty, &property.name);
@@ -245,7 +245,7 @@ impl<'a> ModuleBuilder<'a> {
         Self {
             output_base: String::from(output_base),
             name: String::from(name),
-            types: HashMap::new(),
+            types: BTreeMap::new(),
             resolver,
             store,
             open_list: Vec::new(),

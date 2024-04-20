@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::default::Default;
 use std::error::Error;
-use std::fs::{File, read_dir};
+use std::fs::{read_dir, File};
 use std::io::{BufReader, ErrorKind};
 use std::path::PathBuf;
 
@@ -162,7 +162,7 @@ impl Schema {
     pub fn detailed_description(&self) -> Option<&str> {
         match self {
             Schema::Object(object) => object.metadata.detailed_description.as_deref(),
-            _ => None
+            _ => None,
         }
     }
 
@@ -195,7 +195,7 @@ impl Schema {
     pub fn instance_type(&self) -> InstanceTypes {
         InstanceTypes(match self {
             Schema::Object(object) => object.as_ref().ty.as_ref(),
-            _ => None
+            _ => None,
         })
     }
 
@@ -216,7 +216,7 @@ impl Schema {
         match self {
             Schema::Object(object) => Some((
                 context.with_subpath("additional_properties"),
-                &object.object_rules.additional_properties
+                &object.object_rules.additional_properties,
             )),
             _ => None,
         }
@@ -245,10 +245,9 @@ impl Schema {
 
     pub fn items(&self, context: &SchemaContext) -> Option<(SchemaContext, &Schema)> {
         match self {
-            Schema::Object(object) => Some((
-                context.with_subpath("items"),
-                &object.array_rules.items,
-            )),
+            Schema::Object(object) => {
+                Some((context.with_subpath("items"), &object.array_rules.items))
+            }
             _ => None,
         }
     }
@@ -269,7 +268,7 @@ impl Schema {
     pub fn reference(&self) -> Option<&str> {
         match self {
             Schema::Object(object) => object.reference.as_deref(),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -396,10 +395,7 @@ impl SchemaStore {
             map.insert(file_name.clone(), root_schema);
         }
 
-        Ok(SchemaStore {
-            meta,
-            map,
-        })
+        Ok(SchemaStore { meta, map })
     }
 
     pub fn schemas(&self) -> SchemaIterator {
@@ -431,7 +427,11 @@ impl<'a> SchemaResolver<'a> {
         }
     }
 
-    pub fn resolve(&self, uri: &SchemaUri, context: Option<&SchemaUri>) -> Option<(SchemaContext, &Schema)> {
+    pub fn resolve(
+        &self,
+        uri: &SchemaUri,
+        context: Option<&SchemaUri>,
+    ) -> Option<(SchemaContext, &Schema)> {
         // No path part means we look up in the context
         let schema_path: &str = if uri.path.is_empty() {
             context.unwrap().path.as_ref()
@@ -440,7 +440,12 @@ impl<'a> SchemaResolver<'a> {
         };
 
         // Find the schema store containing the URI
-        let (store, schema) = match self.order.iter().filter_map(|store| store.map.get(schema_path).map(|schema| (*store, schema))).next() {
+        let (store, schema) = match self
+            .order
+            .iter()
+            .filter_map(|store| store.map.get(schema_path).map(|schema| (*store, schema)))
+            .next()
+        {
             Some(tuple) => tuple,
             None => return None,
         };
@@ -450,17 +455,19 @@ impl<'a> SchemaResolver<'a> {
                 Schema::Object(object) => match object.defs.get(def) {
                     Some(def) => def,
                     _ => return None,
-                }
-                _ => return None
+                },
+                _ => return None,
             },
-            _ => &schema.schema
+            _ => &schema.schema,
         };
 
-        let context = SchemaContext { meta: store.meta.clone(), uri: uri.clone() };
+        let context = SchemaContext {
+            meta: store.meta.clone(),
+            uri: uri.clone(),
+        };
         Some((context, schema))
     }
 }
-
 
 pub struct SchemaIterator<'a> {
     store: &'a SchemaStore,
@@ -471,9 +478,18 @@ impl<'a> Iterator for SchemaIterator<'a> {
     type Item = (SchemaContext, &'a Schema);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|(file, schema)| (
-            SchemaContext { meta: self.store.meta.clone(), uri: SchemaUri { path: file.clone(), fragment: None } },
-            &schema.schema))
+        self.inner.next().map(|(file, schema)| {
+            (
+                SchemaContext {
+                    meta: self.store.meta.clone(),
+                    uri: SchemaUri {
+                        path: file.clone(),
+                        fragment: None,
+                    },
+                },
+                &schema.schema,
+            )
+        })
     }
 }
 
@@ -483,7 +499,6 @@ pub enum SingleOrVec<T> {
     Single(Box<T>),
     Vec(Vec<T>),
 }
-
 
 #[derive(Debug)]
 pub struct InstanceTypes<'a>(Option<&'a SingleOrVec<InstanceType>>);
@@ -501,8 +516,7 @@ impl<'a> InstanceTypes<'a> {
         match self.0 {
             Some(SingleOrVec::Single(single)) => Some(**single),
             Some(SingleOrVec::Vec(vec)) if vec.len() == 1 => Some(vec[0]),
-            _ => None
+            _ => None,
         }
     }
 }
-

@@ -2,9 +2,9 @@ use anyhow::Context;
 use itertools::Itertools;
 use serde_json::Value;
 
-use crate::{ArrayType, Enum, FixedArrayType, ObjectPrototype, PropertyListBuilder, Type};
 use crate::schema::{InstanceType, Schema, SchemaContext, SchemaResolver};
 use crate::schema_uri::SchemaUri;
+use crate::{ArrayType, Enum, FixedArrayType, ObjectPrototype, PropertyListBuilder, Type};
 
 pub fn handle_field(
     resolver: &SchemaResolver,
@@ -128,11 +128,7 @@ fn handle_type_from_instance_type(
         InstanceType::Null => anyhow::bail!("Unhandled instance type {:?}", single_instance_type),
         InstanceType::Boolean => Ok(Some(Type::Boolean)),
         InstanceType::Object => handle_object_type(resolver, context, schema),
-        InstanceType::Array => Ok(Some(handle_array(
-            resolver,
-            context,
-            schema,
-        )?)),
+        InstanceType::Array => Ok(Some(handle_array(resolver, context, schema)?)),
         InstanceType::Number => Ok(Some(Type::Number)),
         InstanceType::String => Ok(Some(Type::String)),
         InstanceType::Integer => Ok(Some(Type::Integer)),
@@ -188,5 +184,3 @@ fn handle_array(
         item: Box::new(item_type),
     }))
 }
-
-

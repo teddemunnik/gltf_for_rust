@@ -10,8 +10,14 @@ impl SchemaUri {
     pub fn from_str(str: &str) -> SchemaUri {
         let pound = str.chars().position(|c| c == '#');
         match pound {
-            Some(index) => SchemaUri { path: String::from(&str[..index]), fragment: Some(String::from(&str[(index + 1)..])) },
-            None => SchemaUri { path: String::from(str), fragment: None }
+            Some(index) => SchemaUri {
+                path: String::from(&str[..index]),
+                fragment: Some(String::from(&str[(index + 1)..])),
+            },
+            None => SchemaUri {
+                path: String::from(str),
+                fragment: None,
+            },
         }
     }
 }

@@ -63,9 +63,7 @@ pub fn generate_property_identifier(name: &str) -> Ident {
 
 pub fn generate_option_identifier(name: &str) -> Ident {
     Ident::new(
-        &name
-            .replace(['/', '.'], " ")
-            .to_case(Case::UpperCamel),
+        &name.replace(['/', '.'], " ").to_case(Case::UpperCamel),
         Span::call_site(),
     )
 }
