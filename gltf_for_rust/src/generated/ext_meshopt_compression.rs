@@ -1,4 +1,32 @@
 #![allow(clippy::all, unused_imports)]
+mod buffer_ext_meshopt_compression {
+    use serde::{Serialize, Deserialize};
+    use serde_json::{Map, Value};
+    #[derive(Serialize, Deserialize, Debug)]
+    ///Compressed data for bufferView.
+    pub struct BufferExtMeshoptCompression {
+        #[serde(default)]
+        ///JSON object with extension-specific objects.
+        pub extensions: Option<Map<String, Value>>,
+        #[serde(default)]
+        ///Application-specific data.
+        pub extras: Option<serde_json::Value>,
+        #[serde(default)]
+        ///Set to true to indicate that the buffer is only referenced by bufferViews that have EXT_meshopt_compression extension and as such doesn't need to be loaded.
+        pub fallback: Option<bool>,
+    }
+    impl crate::GltfExtension for BufferExtMeshoptCompression {
+        fn extension_name() -> &'static str {
+            "EXT_meshopt_compression"
+        }
+    }
+    impl crate::GltfObject for BufferExtMeshoptCompression {
+        fn extensions(&self) -> &Option<Map<String, Value>> {
+            &self.extensions
+        }
+    }
+}
+pub use buffer_ext_meshopt_compression::BufferExtMeshoptCompression;
 mod buffer_view_ext_meshopt_compression {
     use serde::{Serialize, Deserialize};
     use serde_json::{Map, Value};
@@ -65,31 +93,3 @@ mod buffer_view_ext_meshopt_compression {
     }
 }
 pub use buffer_view_ext_meshopt_compression::BufferViewExtMeshoptCompression;
-mod buffer_ext_meshopt_compression {
-    use serde::{Serialize, Deserialize};
-    use serde_json::{Map, Value};
-    #[derive(Serialize, Deserialize, Debug)]
-    ///Compressed data for bufferView.
-    pub struct BufferExtMeshoptCompression {
-        #[serde(default)]
-        ///JSON object with extension-specific objects.
-        pub extensions: Option<Map<String, Value>>,
-        #[serde(default)]
-        ///Application-specific data.
-        pub extras: Option<serde_json::Value>,
-        #[serde(default)]
-        ///Set to true to indicate that the buffer is only referenced by bufferViews that have EXT_meshopt_compression extension and as such doesn't need to be loaded.
-        pub fallback: Option<bool>,
-    }
-    impl crate::GltfExtension for BufferExtMeshoptCompression {
-        fn extension_name() -> &'static str {
-            "EXT_meshopt_compression"
-        }
-    }
-    impl crate::GltfObject for BufferExtMeshoptCompression {
-        fn extensions(&self) -> &Option<Map<String, Value>> {
-            &self.extensions
-        }
-    }
-}
-pub use buffer_ext_meshopt_compression::BufferExtMeshoptCompression;

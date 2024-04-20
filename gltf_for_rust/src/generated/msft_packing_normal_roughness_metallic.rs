@@ -1,10 +1,10 @@
 #![allow(clippy::all, unused_imports)]
 pub mod gltf {
     mod extension {
-        use serde::{Serialize, Deserialize};
+        use serde::{Deserialize, Serialize};
         use serde_json::{Map, Value};
         mod normal_roughness_metallic_texture {
-            use serde::{Serialize, Deserialize};
+            use serde::{Deserialize, Serialize};
             use serde_json::{Map, Value};
             #[derive(Serialize, Deserialize, Debug)]
             ///A texture with the packing Normal (RG), Roughness (B), Metallic (A).
@@ -27,9 +27,7 @@ pub mod gltf {
             #[serde(rename = "normalRoughnessMetallicTexture")]
             #[serde(default)]
             ///A texture with the packing Normal (RG), Roughness (B), Metallic (A).
-            pub normal_roughness_metallic_texture: Option<
-                NormalRoughnessMetallicTexture,
-            >,
+            pub normal_roughness_metallic_texture: Option<NormalRoughnessMetallicTexture>,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {

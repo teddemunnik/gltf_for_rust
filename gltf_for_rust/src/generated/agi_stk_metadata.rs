@@ -1,4 +1,33 @@
 #![allow(clippy::all, unused_imports)]
+mod gltf_agi_stk_metadata {
+    use serde::{Serialize, Deserialize};
+    use serde_json::{Map, Value};
+    #[derive(Serialize, Deserialize, Debug)]
+    ///glTF Extension that defines metadata for use with STK (Systems Tool Kit).
+    pub struct GltfAgiStkMetadata {
+        #[serde(default)]
+        ///JSON object with extension-specific objects.
+        pub extensions: Option<Map<String, Value>>,
+        #[serde(default)]
+        ///Application-specific data.
+        pub extras: Option<serde_json::Value>,
+        #[serde(rename = "solarPanelGroups")]
+        #[serde(default)]
+        ///An array of solar panel groups.
+        pub solar_panel_groups: Vec<crate::generated::agi_stk_metadata::SolarPanelGroup>,
+    }
+    impl crate::GltfExtension for GltfAgiStkMetadata {
+        fn extension_name() -> &'static str {
+            "AGI_stk_metadata"
+        }
+    }
+    impl crate::GltfObject for GltfAgiStkMetadata {
+        fn extensions(&self) -> &Option<Map<String, Value>> {
+            &self.extensions
+        }
+    }
+}
+pub use gltf_agi_stk_metadata::GltfAgiStkMetadata;
 mod node_agi_stk_metadata {
     use serde::{Serialize, Deserialize};
     use serde_json::{Map, Value};
@@ -32,35 +61,6 @@ mod node_agi_stk_metadata {
     }
 }
 pub use node_agi_stk_metadata::NodeAgiStkMetadata;
-mod gltf_agi_stk_metadata {
-    use serde::{Serialize, Deserialize};
-    use serde_json::{Map, Value};
-    #[derive(Serialize, Deserialize, Debug)]
-    ///glTF Extension that defines metadata for use with STK (Systems Tool Kit).
-    pub struct GltfAgiStkMetadata {
-        #[serde(default)]
-        ///JSON object with extension-specific objects.
-        pub extensions: Option<Map<String, Value>>,
-        #[serde(default)]
-        ///Application-specific data.
-        pub extras: Option<serde_json::Value>,
-        #[serde(rename = "solarPanelGroups")]
-        #[serde(default)]
-        ///An array of solar panel groups.
-        pub solar_panel_groups: Vec<crate::generated::agi_stk_metadata::SolarPanelGroup>,
-    }
-    impl crate::GltfExtension for GltfAgiStkMetadata {
-        fn extension_name() -> &'static str {
-            "AGI_stk_metadata"
-        }
-    }
-    impl crate::GltfObject for GltfAgiStkMetadata {
-        fn extensions(&self) -> &Option<Map<String, Value>> {
-            &self.extensions
-        }
-    }
-}
-pub use gltf_agi_stk_metadata::GltfAgiStkMetadata;
 mod solar_panel_group {
     use serde::{Serialize, Deserialize};
     use serde_json::{Map, Value};

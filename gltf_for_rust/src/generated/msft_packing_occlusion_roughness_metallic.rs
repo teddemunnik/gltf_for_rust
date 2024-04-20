@@ -1,10 +1,10 @@
 #![allow(clippy::all, unused_imports)]
 pub mod gltf {
     mod extension {
-        use serde::{Serialize, Deserialize};
+        use serde::{Deserialize, Serialize};
         use serde_json::{Map, Value};
         mod normal_texture {
-            use serde::{Serialize, Deserialize};
+            use serde::{Deserialize, Serialize};
             use serde_json::{Map, Value};
             #[derive(Serialize, Deserialize, Debug)]
             ///A texture which contains two channel (RG) normal map.
@@ -16,7 +16,7 @@ pub mod gltf {
         }
         pub use normal_texture::NormalTexture;
         mod occlusion_roughness_metallic_texture {
-            use serde::{Serialize, Deserialize};
+            use serde::{Deserialize, Serialize};
             use serde_json::{Map, Value};
             #[derive(Serialize, Deserialize, Debug)]
             ///A texture with packing Occlusion (R), Roughness (G), Metallic (B).
@@ -28,7 +28,7 @@ pub mod gltf {
         }
         pub use occlusion_roughness_metallic_texture::OcclusionRoughnessMetallicTexture;
         mod roughness_metallic_occlusion_texture {
-            use serde::{Serialize, Deserialize};
+            use serde::{Deserialize, Serialize};
             use serde_json::{Map, Value};
             #[derive(Serialize, Deserialize, Debug)]
             ///A texture with packing Roughness (R), Metallic (G), Occlusion (B).
@@ -55,15 +55,11 @@ pub mod gltf {
             #[serde(rename = "occlusionRoughnessMetallicTexture")]
             #[serde(default)]
             ///A texture with packing Occlusion (R), Roughness (G), Metallic (B).
-            pub occlusion_roughness_metallic_texture: Option<
-                OcclusionRoughnessMetallicTexture,
-            >,
+            pub occlusion_roughness_metallic_texture: Option<OcclusionRoughnessMetallicTexture>,
             #[serde(rename = "roughnessMetallicOcclusionTexture")]
             #[serde(default)]
             ///A texture with packing Roughness (R), Metallic (G), Occlusion (B).
-            pub roughness_metallic_occlusion_texture: Option<
-                RoughnessMetallicOcclusionTexture,
-            >,
+            pub roughness_metallic_occlusion_texture: Option<RoughnessMetallicOcclusionTexture>,
         }
         impl crate::GltfObject for Extension {
             fn extensions(&self) -> &Option<Map<String, Value>> {
