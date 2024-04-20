@@ -1,5 +1,4 @@
 use std::{fs, fs::File, io::BufWriter};
-use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs::read_dir;
@@ -15,9 +14,7 @@ use quote::quote;
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::naming::{
-    generate_enum_type_identifier, generate_option_identifier, generate_property_identifier,
-};
+use crate::module_builder::{ModuleBuilder, TypeDescription};
 use crate::schema::{InstanceType, Schema, SchemaContext, SchemaResolver, SchemaStore, SchemaStoreMeta};
 use crate::schema_uri::SchemaUri;
 
@@ -25,6 +22,7 @@ mod naming;
 mod schema;
 mod schema_uri;
 mod type_deduction;
+mod module_builder;
 
 fn plural_to_singular(maybe_plural: &str) -> String {
     if let Some(singular) = maybe_plural.strip_suffix("ies") {
@@ -49,21 +47,21 @@ enum MyError {
     UnhandledArrayItemType(Option<Vec<Schema>>),
 }
 
-struct Enum {
+pub struct Enum {
     options: Vec<String>,
 }
 
-struct ArrayType {
-    min_length: Option<usize>,
-    item: Box<Type>,
+pub struct ArrayType {
+    pub min_length: Option<usize>,
+    pub item: Box<Type>,
 }
 
-struct FixedArrayType {
-    item: Box<Type>,
-    length: u32,
+pub struct FixedArrayType {
+    pub item: Box<Type>,
+    pub length: u32,
 }
 
-enum Type {
+pub enum Type {
     Any,
     Array(ArrayType),
     FixedArray(FixedArrayType),
@@ -80,14 +78,14 @@ enum Type {
     MapOfObjects,
 }
 
-struct ObjectPrototype {
-    comment: Option<String>,
-    properties: Vec<Property>,
+pub struct ObjectPrototype {
+    pub comment: Option<String>,
+    pub properties: Vec<Property>,
 }
 
-struct ObjectType {
-    name: String,
-    prototype: ObjectPrototype,
+pub struct ObjectType {
+    pub name: String,
+    pub prototype: ObjectPrototype,
 }
 
 fn generate_named_type_path(resolver: &SchemaResolver, uri: &SchemaUri) -> TokenStream {
@@ -154,12 +152,12 @@ fn schedule_types(open_types: &mut Vec<SchemaUri>, closed_types: &HashSet<Schema
     }
 }
 
-struct Property {
-    name: String,
-    ty: Type,
-    optional: bool,
-    default: Option<Value>,
-    comment: Option<String>,
+pub struct Property {
+    pub name: String,
+    pub ty: Type,
+    pub optional: bool,
+    pub default: Option<Value>,
+    pub comment: Option<String>,
 }
 
 struct PropertyListBuilder {
@@ -302,115 +300,8 @@ impl RustTypeWriter {
     }
 }
 
-fn write_embedded_enum(
-    property_name: &str,
-    enumeration: &Enum,
-    default: &Option<Value>,
-) -> TokenStream {
-    let enum_identifier = generate_enum_type_identifier(property_name);
-    let enum_options = enumeration.options.iter().map(|option| {
-        let identifier = generate_option_identifier(option);
 
-        let is_default = match &default {
-            Some(Value::String(string)) => string == option,
-            _ => false,
-        };
-
-        let default_declaration = is_default.then(|| quote! { #[default] });
-        quote! {
-            #[serde(rename=#option)]
-            #default_declaration
-            #identifier
-        }
-    });
-
-    let default_declaration = default.as_ref().map(|_| quote! { #[derive(Default)] });
-    quote! {
-        #[derive(Serialize, Deserialize, Debug)]
-        #default_declaration
-        pub enum #enum_identifier{
-            #(#enum_options),*
-        }
-    }
-}
-
-fn write_embedded_type(
-    property_name: &str,
-    ty: &Type,
-    default: &Option<Value>,
-    resolver: &SchemaResolver,
-) -> anyhow::Result<Option<TokenStream>> {
-    Ok(match ty {
-        Type::Array(array) => {
-            write_embedded_type(property_name, array.item.as_ref(), &None, resolver)?
-        }
-        Type::EmbeddedObject { name, prototype } => Some(generate_structure(
-            &name
-                .clone()
-                .unwrap_or_else(|| plural_to_singular(property_name)),
-            prototype,
-            resolver,
-        ).with_context(|| format!("Failed to generate embedded type {}", name.as_ref().unwrap()))?),
-        Type::Enum(enumeration) => Some(write_embedded_enum(property_name, enumeration, default)),
-        _ => None,
-    })
-}
-
-fn write_property(
-    resolver: &SchemaResolver,
-    writer: &mut RustTypeWriter,
-    property: &Property,
-) -> anyhow::Result<TokenStream> {
-    let rust_type = match (&property.ty, property.optional) {
-        // Remove the Option for optional Vec's with a minimum length of 1
-        // This way we can guarantee this invariant by telling serde to not serialize zero length vecs.
-        (Type::Array(array_type), true)
-        if array_type.min_length.is_some() && array_type.min_length.unwrap() == 1 =>
-            {
-                generate_rust_type(resolver, &property.ty, &property.name)
-            }
-
-        (_, true) => {
-            let rust_type: TokenStream = generate_rust_type(resolver, &property.ty, &property.name);
-            quote! { Option::<#rust_type> }
-        }
-        _ => generate_rust_type(resolver, &property.ty, &property.name),
-    };
-
-    let property_identifier = generate_property_identifier(&property.name);
-    let property_identifier_name = property_identifier.to_string();
-
-    if let Some(embedded_type) =
-        write_embedded_type(&property.name, &property.ty, &property.default, resolver)?
-    {
-        writer.embedded_types.push(embedded_type);
-    }
-
-    let default_declaration = match property.optional {
-        true => Some(quote! { #[serde(default)]}),
-        false => None
-    };
-
-    // If the property identifier is different from the one in the spec we need to add a serde
-    // rename to make it match the spec.
-    let rename_declaration =
-        if property_identifier_name.partial_cmp(&property.name) != Some(Ordering::Equal) {
-            let name = &property.name;
-            Some(quote![#[serde(rename = #name)]])
-        } else {
-            None
-        };
-
-    let docstring = property.comment.as_ref().map(|x| quote! { #[doc=#x] });
-    Ok(quote! {
-        #rename_declaration
-        #default_declaration
-        #docstring
-        pub #property_identifier: #rust_type
-    })
-}
-
-fn read_typed_object(
+pub fn read_typed_object(
     resolver: &SchemaResolver,
     context: &SchemaContext,
     schema: &Schema,
@@ -434,84 +325,6 @@ fn read_typed_object(
             properties: properties.properties,
         },
     }
-}
-
-fn generate_structure(
-    name: &str,
-    object_prototype: &ObjectPrototype,
-    resolver: &SchemaResolver,
-) -> anyhow::Result<TokenStream> {
-    let mod_identifier = &naming::generate_property_identifier(name);
-    let type_identifier = naming::generate_type_identifier(name);
-
-    let mut property_tokens = Vec::new();
-    let mut type_writer = RustTypeWriter::new();
-    for property in object_prototype.properties.iter() {
-        property_tokens.push(write_property(resolver, &mut type_writer, property).with_context(|| format!("failed to write property {}", property.name))?)
-    }
-
-    let doc = object_prototype
-        .comment
-        .as_ref()
-        .map(|comment| quote! { #[doc=#comment]});
-    let embedded_types = &type_writer.embedded_types;
-    let default_declarations = &type_writer.default_declarations;
-
-    // Trait implementation if the object supports extensions
-    let gltf_object_trait = if object_prototype
-        .properties
-        .iter()
-        .any(|property| property.name.eq("extensions"))
-    {
-        Some(quote! {
-            impl crate::GltfObject for #type_identifier{
-                fn extensions(&self) -> &Option<Map<String, Value>>{
-                    &self.extensions
-                }
-            }
-        })
-    } else {
-        None
-    };
-
-    Ok(quote! {
-        mod #mod_identifier{
-            use serde::{Serialize, Deserialize};
-            use serde_json::{Map, Value};
-
-            #(#embedded_types)*
-
-            #[derive(Serialize, Deserialize, Debug)]
-            #doc
-            pub struct #type_identifier{
-                #(#property_tokens),*
-            }
-
-            #gltf_object_trait
-
-            #(#default_declarations)*
-
-        }
-        pub use #mod_identifier::#type_identifier;
-
-    })
-}
-
-fn generate_rust(
-    resolver: &SchemaResolver,
-    context: &SchemaContext,
-    schema: &Schema,
-    open_types: &mut Vec<SchemaUri>,
-    closed_types: &HashSet<SchemaUri>,
-) -> anyhow::Result<TokenStream> {
-    let object_type = read_typed_object(resolver, context, schema);
-
-    // Schedule nested types for generation
-    for property in object_type.prototype.properties.iter() {
-        schedule_types(open_types, closed_types, &property.ty);
-    }
-
-    generate_structure(&object_type.name, &object_type.prototype, resolver).with_context(|| format!("Failed to generate rust for schema {}", context.uri()))
 }
 
 #[allow(unused)]
@@ -548,9 +361,7 @@ fn load_extensions(
         let mut extension_schema_store = SchemaStore::read(SchemaStoreMeta::Extension(extension_name.clone()), &schemas_path.to_string_lossy()).unwrap();
         let resolver = SchemaResolver::extension(&specification_schema, &extension_schema_store);
 
-        let mut extension_module = Vec::new();
-        let mut open_types = Vec::new();
-        let mut closed_types = HashSet::new();
+        let mut specification_builder = ModuleBuilder::new(generated_path, &extension_name, &resolver, &extension_schema_store);
 
         for (context, schema) in extension_schema_store.schemas() {
             // If a schema ends with {Prefix}.ExtensionName.schema.json it represents the extension object with the extension name on that object
@@ -571,63 +382,12 @@ fn load_extensions(
                 &extension_name, &base_object_name
             );
 
-            let base_object_module_ident =
-                naming::generate_base_module_identifier(base_object_name);
-            let extension_doc = Some(format!(
-                "The {extension_name} extension for {base_object_name}"
-            ));
-
-            let comment = schema.description().map(|desc| desc.to_string());
-            let mut properties = PropertyListBuilder::new();
-
-            properties.recursive_read_properties(&resolver, &context, schema).with_context(|| format!("Failed to read properties for extension {extension_name} on base object {base_object_name}")).unwrap();
-
-            for property in properties.properties.iter() {
-                schedule_types(&mut open_types, &closed_types, &property.ty);
-            }
-
-            let prototype = ObjectPrototype {
-                properties: properties.properties,
-                comment,
-            };
-
-
-            let structure = generate_structure("Extension", &prototype, &resolver).with_context(|| format!("Failed to generate structure {}", context.uri()))?;
-            extension_module.push(quote! {
-               pub mod #base_object_module_ident{
-                    #structure
-
-                    impl crate::GltfExtension for Extension{
-                        fn extension_name() -> &'static str{
-                            #extension_name
-                        }
-                    }
-                }
-            });
+            specification_builder.push(TypeDescription { schema: uri.clone(), name_override: None, extension: Some(extension_name.clone()) });
         }
 
-        while let Some(uri) = open_types.pop() {
-            closed_types.insert(uri.clone());
-            if !extension_schema_store.is_local_uri(&uri) {
-                continue;
-            }
 
-            let (context, schema) = resolver.resolve(&uri, None).unwrap();
-            extension_module.push(generate_rust(&resolver, &context, &schema, &mut open_types, &closed_types)?);
-        }
-
-        let output = File::create(format!("{generated_path}/{extension_module_name}.rs")).unwrap();
-        let mut writer = BufWriter::new(output);
-
-        let rust = quote! {
-            #![allow(clippy::all, unused_imports)]
-
-            #(#extension_module)*
-        };
-
-        let rust_file: syn::File = syn::parse2(rust).unwrap();
-        write!(writer, "{}", prettyplease::unparse(&rust_file)).unwrap();
-
+        specification_builder.traverse();
+        specification_builder.generate().unwrap();
         generated_manifest
             .extension_modules
             .push(extension_module_name);
@@ -696,39 +456,18 @@ fn main() {
     const SPECIFICATION_FOLDER: &str = "vendor/gltf/specification/2.0/schema";
     const KHRONOS_EXTENSIONS_FOLDER: &str = "vendor/gltf/extensions/2.0/Khronos";
     const VENDOR_EXTENSIONS_FOLDER: &str = "vendor/gltf/extensions/2.0/Vendor";
-    const OUTPUT_BASE: &str = "gltf_for_rust/src/generated";
 
     // Recreate the generated directory
-    ensure_empty_dir(OUTPUT_BASE);
+    const OUTPUT_BASE: &str = "gltf_for_rust/src/generated";
 
     // Create the core specification schema store
     let specification_schema_store = SchemaStore::read(SchemaStoreMeta::Core, SPECIFICATION_FOLDER).unwrap();
-
-    // Collect root types:
-    let mut closed_types = HashSet::new();
-    let mut open_types = Vec::new();
-
-    let mut types = Vec::new();
-    open_types.push(SchemaUri::from_str("glTF.schema.json"));
-
     let specification_resolver = SchemaResolver::specification(&specification_schema_store);
 
-    while let Some(uri) = open_types.pop() {
-        closed_types.insert(uri.clone());
-        let (context, schema) = specification_resolver.resolve(&uri, None).unwrap();
-        types.push(generate_rust(&specification_resolver, &context, &schema, &mut open_types, &closed_types).unwrap());
-    }
-
-    let rust = quote! {
-        #![allow(clippy::all, unused_imports)]
-
-        #(#types)*
-    };
-
-    let file: syn::File = syn::parse2(rust).unwrap();
-    let output = File::create(format!("{OUTPUT_BASE}/gltf.rs")).unwrap();
-    let mut writer = BufWriter::new(output);
-    write!(writer, "{}", prettyplease::unparse(&file)).unwrap();
+    let mut specification_builder = ModuleBuilder::new(OUTPUT_BASE, "gltf", &specification_resolver, &specification_schema_store);
+    specification_builder.push(TypeDescription { schema: SchemaUri::from_str("glTF.schema.json"), name_override: None, extension: None });
+    specification_builder.traverse();
+    specification_builder.generate().unwrap();
 
     let mut generated_manifest = GeneratedManifest::new();
     load_extensions(
