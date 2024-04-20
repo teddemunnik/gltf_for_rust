@@ -1,8 +1,8 @@
-use std::{fs::File, io::BufWriter};
 use std::collections::HashMap;
 use std::fs::read_dir;
 use std::io::Write;
 use std::vec::Vec;
+use std::{fs::File, io::BufWriter};
 
 use anyhow::Context;
 use convert_case::{Case, Casing};
@@ -16,11 +16,11 @@ use crate::module_builder::{ModuleBuilder, TypeDescription};
 use crate::schema::{Schema, SchemaContext, SchemaResolver, SchemaStore, SchemaStoreMeta};
 use crate::schema_uri::SchemaUri;
 
+mod module_builder;
 mod naming;
 mod schema;
 mod schema_uri;
 mod type_deduction;
-mod module_builder;
 
 fn plural_to_singular(maybe_plural: &str) -> String {
     if let Some(singular) = maybe_plural.strip_suffix("ies") {
@@ -163,7 +163,11 @@ impl PropertyListBuilder {
         }
     }
 
-    fn read_description<'a>(schema_resolver: &'a SchemaResolver, context: &SchemaContext, schema: &'a Schema) -> Option<&'a str> {
+    fn read_description<'a>(
+        schema_resolver: &'a SchemaResolver,
+        context: &SchemaContext,
+        schema: &'a Schema,
+    ) -> Option<&'a str> {
         if let Some(detailed_description) = schema.detailed_description() {
             return Some(detailed_description);
         }
@@ -172,7 +176,9 @@ impl PropertyListBuilder {
             return Some(description);
         }
 
-        if let Some((context, schema)) = schema.reference().and_then(|reference| schema_resolver.resolve(&SchemaUri::from_str(reference), Some(context.uri()))) {
+        if let Some((context, schema)) = schema.reference().and_then(|reference| {
+            schema_resolver.resolve(&SchemaUri::from_str(reference), Some(context.uri()))
+        }) {
             return Self::read_description(schema_resolver, &context, schema);
         }
 
@@ -188,7 +194,9 @@ impl PropertyListBuilder {
         // TODO: Ensure proper handling of compound schemas, right now we assume 'inheritance'
 
         // Read properties from reference schema
-        if let Some((context, schema)) = schema.reference().and_then(|reference| resolver.resolve(&SchemaUri::from_str(reference), Some(context.uri()))) {
+        if let Some((context, schema)) = schema.reference().and_then(|reference| {
+            resolver.resolve(&SchemaUri::from_str(reference), Some(context.uri()))
+        }) {
             self.recursive_read_properties(resolver, &context, schema)?;
         }
 
@@ -201,15 +209,15 @@ impl PropertyListBuilder {
         for (context, name, field_schema) in schema.properties(context) {
             let property = self.find_or_add(name);
             if let Type::Any = property.ty {
-                property.ty =
-                    type_deduction::handle_field(resolver, &context, field_schema)
-                        .with_context(|| {
-                            format!("failed to deduce field type for property \"{name}\"")
-                        })?;
+                property.ty = type_deduction::handle_field(resolver, &context, field_schema)
+                    .with_context(|| {
+                        format!("failed to deduce field type for property \"{name}\"")
+                    })?;
             }
 
             if property.comment.is_none() {
-                property.comment = Self::read_description(resolver, &context, field_schema).map(String::from);
+                property.comment =
+                    Self::read_description(resolver, &context, field_schema).map(String::from);
             }
 
             if property.default.is_none() {
@@ -239,7 +247,6 @@ impl RustTypeWriter {
     }
 }
 
-
 pub fn read_typed_object(
     resolver: &SchemaResolver,
     context: &SchemaContext,
@@ -250,12 +257,7 @@ pub fn read_typed_object(
     let mut properties = PropertyListBuilder::new();
     properties
         .recursive_read_properties(resolver, context, schema)
-        .with_context(|| {
-            format!(
-                "Failed to read properties for schema {}",
-                context.uri()
-            )
-        })
+        .with_context(|| format!("Failed to read properties for schema {}", context.uri()))
         .unwrap();
     ObjectType {
         name,
@@ -297,10 +299,19 @@ fn load_extensions(
         schemas_path.push("schema");
         let extension_schema_suffix = format!("{}.schema.json", &extension_name);
 
-        let mut extension_schema_store = SchemaStore::read(SchemaStoreMeta::Extension(extension_name.clone()), &schemas_path.to_string_lossy()).unwrap();
+        let mut extension_schema_store = SchemaStore::read(
+            SchemaStoreMeta::Extension(extension_name.clone()),
+            &schemas_path.to_string_lossy(),
+        )
+        .unwrap();
         let resolver = SchemaResolver::extension(specification_schema, &extension_schema_store);
 
-        let mut specification_builder = ModuleBuilder::new(generated_path, &extension_name, &resolver, &extension_schema_store);
+        let mut specification_builder = ModuleBuilder::new(
+            generated_path,
+            &extension_name,
+            &resolver,
+            &extension_schema_store,
+        );
 
         for (context, schema) in extension_schema_store.schemas() {
             // If a schema ends with {Prefix}.ExtensionName.schema.json it represents the extension object with the extension name on that object
@@ -321,9 +332,12 @@ fn load_extensions(
                 &extension_name, &base_object_name
             );
 
-            specification_builder.push(TypeDescription { schema: uri.clone(), name_override: None, extension: Some(extension_name.clone()) });
+            specification_builder.push(TypeDescription {
+                schema: uri.clone(),
+                name_override: None,
+                extension: Some(extension_name.clone()),
+            });
         }
-
 
         specification_builder.traverse();
         specification_builder.generate().unwrap();
@@ -364,7 +378,7 @@ fn write_root_module(generated_path: &str, generated_manifest: &GeneratedManifes
         pub mod gltf;
         #(#extension_modules)*
     })
-        .unwrap();
+    .unwrap();
 
     write!(writer, "{}", prettyplease::unparse(&rust_file)).unwrap();
 }
@@ -378,11 +392,21 @@ fn main() {
     const OUTPUT_BASE: &str = "gltf_for_rust/src/generated";
 
     // Create the core specification schema store
-    let specification_schema_store = SchemaStore::read(SchemaStoreMeta::Core, SPECIFICATION_FOLDER).unwrap();
+    let specification_schema_store =
+        SchemaStore::read(SchemaStoreMeta::Core, SPECIFICATION_FOLDER).unwrap();
     let specification_resolver = SchemaResolver::specification(&specification_schema_store);
 
-    let mut specification_builder = ModuleBuilder::new(OUTPUT_BASE, "gltf", &specification_resolver, &specification_schema_store);
-    specification_builder.push(TypeDescription { schema: SchemaUri::from_str("glTF.schema.json"), name_override: None, extension: None });
+    let mut specification_builder = ModuleBuilder::new(
+        OUTPUT_BASE,
+        "gltf",
+        &specification_resolver,
+        &specification_schema_store,
+    );
+    specification_builder.push(TypeDescription {
+        schema: SchemaUri::from_str("glTF.schema.json"),
+        name_override: None,
+        extension: None,
+    });
     specification_builder.traverse();
     specification_builder.generate().unwrap();
 
@@ -392,14 +416,16 @@ fn main() {
         KHRONOS_EXTENSIONS_FOLDER,
         OUTPUT_BASE,
         &specification_schema_store,
-    ).unwrap();
+    )
+    .unwrap();
 
     load_extensions(
         &mut generated_manifest,
         VENDOR_EXTENSIONS_FOLDER,
         OUTPUT_BASE,
         &specification_schema_store,
-    ).unwrap();
+    )
+    .unwrap();
 
     write_root_module(OUTPUT_BASE, &generated_manifest);
 }

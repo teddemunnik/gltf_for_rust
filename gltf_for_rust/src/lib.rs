@@ -4,9 +4,9 @@ use thiserror::Error;
 
 mod generated;
 
+mod import;
 #[cfg(test)]
 mod test;
-mod import;
 
 #[non_exhaustive]
 #[derive(Error, Debug)]

@@ -9,10 +9,15 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use serde_json::Value;
 
-use crate::{Enum, generate_rust_type, naming, ObjectPrototype, plural_to_singular, Property, read_typed_object, RustTypeWriter, Type};
-use crate::naming::{generate_enum_type_identifier, generate_option_identifier, generate_property_identifier};
+use crate::naming::{
+    generate_enum_type_identifier, generate_option_identifier, generate_property_identifier,
+};
 use crate::schema::{SchemaResolver, SchemaStore};
 use crate::schema_uri::SchemaUri;
+use crate::{
+    generate_rust_type, naming, plural_to_singular, read_typed_object, Enum, ObjectPrototype,
+    Property, RustTypeWriter, Type,
+};
 
 pub struct TypeDescription {
     pub schema: SchemaUri,
@@ -77,14 +82,22 @@ fn write_embedded_type(
         Type::Array(array) => {
             write_embedded_type(property_name, array.item.as_ref(), &None, resolver)?
         }
-        Type::EmbeddedObject { name, prototype } => Some(generate_structure(
-            &name
-                .clone()
-                .unwrap_or_else(|| plural_to_singular(property_name)),
-            prototype,
-            None,
-            resolver,
-        ).with_context(|| format!("Failed to generate embedded type {}", name.as_ref().unwrap()))?),
+        Type::EmbeddedObject { name, prototype } => Some(
+            generate_structure(
+                &name
+                    .clone()
+                    .unwrap_or_else(|| plural_to_singular(property_name)),
+                prototype,
+                None,
+                resolver,
+            )
+            .with_context(|| {
+                format!(
+                    "Failed to generate embedded type {}",
+                    name.as_ref().unwrap()
+                )
+            })?,
+        ),
         Type::Enum(enumeration) => Some(write_embedded_enum(property_name, enumeration, default)),
         _ => None,
     })
@@ -99,10 +112,10 @@ fn write_property(
         // Remove the Option for optional Vec's with a minimum length of 1
         // This way we can guarantee this invariant by telling serde to not serialize zero length vecs.
         (Type::Array(array_type), true)
-        if array_type.min_length.is_some() && array_type.min_length.unwrap() == 1 =>
-            {
-                generate_rust_type(resolver, &property.ty, &property.name)
-            }
+            if array_type.min_length.is_some() && array_type.min_length.unwrap() == 1 =>
+        {
+            generate_rust_type(resolver, &property.ty, &property.name)
+        }
 
         (_, true) => {
             let rust_type: TokenStream = generate_rust_type(resolver, &property.ty, &property.name);
@@ -122,7 +135,7 @@ fn write_property(
 
     let default_declaration = match property.optional {
         true => Some(quote! { #[serde(default)]}),
-        false => None
+        false => None,
     };
 
     // If the property identifier is different from the one in the spec we need to add a serde
@@ -156,7 +169,10 @@ fn generate_structure(
     let mut property_tokens = Vec::new();
     let mut type_writer = RustTypeWriter::new();
     for property in prototype.properties.iter() {
-        property_tokens.push(write_property(resolver, &mut type_writer, property).with_context(|| format!("failed to write property {}", property.name))?)
+        property_tokens.push(
+            write_property(resolver, &mut type_writer, property)
+                .with_context(|| format!("failed to write property {}", property.name))?,
+        )
     }
 
     let doc = prototype
@@ -220,7 +236,12 @@ fn generate_structure(
 }
 
 impl<'a> ModuleBuilder<'a> {
-    pub fn new(output_base: &str, name: &str, resolver: &'a SchemaResolver, store: &'a SchemaStore) -> Self {
+    pub fn new(
+        output_base: &str,
+        name: &str,
+        resolver: &'a SchemaResolver,
+        store: &'a SchemaStore,
+    ) -> Self {
         Self {
             output_base: String::from(output_base),
             name: String::from(name),
@@ -237,14 +258,20 @@ impl<'a> ModuleBuilder<'a> {
     fn visit_type(&mut self, ty: &Type) {
         match ty {
             Type::TypedObject(schema) => {
-                if self.types.contains_key(schema) || self.open_list.iter().any(|item| item.schema.eq(schema)) {
+                if self.types.contains_key(schema)
+                    || self.open_list.iter().any(|item| item.schema.eq(schema))
+                {
                     return;
                 }
 
-                self.open_list.push(TypeDescription { schema: schema.clone(), name_override: None, extension: None })
+                self.open_list.push(TypeDescription {
+                    schema: schema.clone(),
+                    name_override: None,
+                    extension: None,
+                })
             }
             Type::Array(array) => self.visit_type(&array.item),
-            _ => ()
+            _ => (),
         }
     }
 
@@ -264,18 +291,30 @@ impl<'a> ModuleBuilder<'a> {
                 self.visit_type(&property.ty);
             }
 
-            self.types.insert(ty.schema.clone(), ResolvedType {
-                name: ty.name_override.unwrap_or(object_type.name),
-                prototype: object_type.prototype,
-                extension: ty.extension,
-            });
+            self.types.insert(
+                ty.schema.clone(),
+                ResolvedType {
+                    name: ty.name_override.unwrap_or(object_type.name),
+                    prototype: object_type.prototype,
+                    extension: ty.extension,
+                },
+            );
         }
     }
 
     pub fn generate(&self) -> anyhow::Result<()> {
-        let types: Vec<TokenStream> = self.types.values().map(|ty| {
-            generate_structure(&ty.name, &ty.prototype, ty.extension.as_deref(), self.resolver)
-        }).collect::<anyhow::Result<Vec<TokenStream>>>()?;
+        let types: Vec<TokenStream> = self
+            .types
+            .values()
+            .map(|ty| {
+                generate_structure(
+                    &ty.name,
+                    &ty.prototype,
+                    ty.extension.as_deref(),
+                    self.resolver,
+                )
+            })
+            .collect::<anyhow::Result<Vec<TokenStream>>>()?;
 
         let rust = quote! {
             #![allow(clippy::all, unused_imports)]
@@ -293,4 +332,3 @@ impl<'a> ModuleBuilder<'a> {
         Ok(())
     }
 }
-
