@@ -8,8 +8,9 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use serde_json::Value;
 
-use crate::{Enum, GeneratedManifest, naming, ObjectPrototype, Property, Type};
+use crate::{Enum, GeneratedManifest, module_tree, naming, ObjectPrototype, Property, Type};
 use crate::module_builder::ModuleBuilder;
+use crate::module_tree::ModuleTree;
 use crate::naming::{generate_enum_type_identifier, generate_option_identifier, generate_property_identifier};
 use crate::schema::{SchemaResolver, SchemaStoreMeta};
 use crate::schema_uri::SchemaUri;
@@ -284,24 +285,36 @@ fn generate_rust_type(resolver: &SchemaResolver, ty: &Type, field_name: &String)
     }
 }
 
-pub fn write_module(module: &ModuleBuilder) -> anyhow::Result<()> {
-    let types: Vec<TokenStream> = module
-        .types
-        .values()
-        .map(|ty| {
-            generate_structure(
-                &ty.name,
-                &ty.prototype,
-                ty.extension.as_deref(),
-                module.resolver,
-            )
+pub fn write_submodule(resolver: &SchemaResolver, item: &module_tree::Item) -> anyhow::Result<TokenStream> {
+    let contained_modules = item.children.iter().map(|(name, module)| {
+        let ident = Ident::new(name, Span::call_site());
+        let module_contents = write_submodule(resolver, module)?;
+        Ok(quote! {
+            mod #ident{
+                #module_contents
+            }
         })
-        .collect::<anyhow::Result<Vec<TokenStream>>>()?;
+    }).collect::<anyhow::Result<Vec<_>>>()?;
+
+    let contained_types: Vec<TokenStream> = item.objects.iter().map(|ty| {
+        generate_structure(&ty.name, &ty.prototype, ty.extension.as_deref(), resolver)
+    }).collect::<anyhow::Result<Vec<_>>>()?;
+
+    Ok(quote! {
+        #(#contained_modules)*
+
+        #(#contained_types)*
+    })
+}
+
+pub fn write_module(module: &ModuleBuilder) -> anyhow::Result<()> {
+    let tree = ModuleTree::build(module);
+    let contents = write_submodule(module.resolver, &tree.root)?;
 
     let rust = quote! {
         #![allow(clippy::all, unused_imports)]
 
-        #(#types)*
+        #contents
     };
 
     let file: syn::File = syn::parse2(rust).unwrap();

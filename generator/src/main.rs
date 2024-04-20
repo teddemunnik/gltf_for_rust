@@ -18,6 +18,7 @@ mod schema;
 mod schema_uri;
 mod type_deduction;
 mod codegen;
+mod module_tree;
 
 pub struct Enum {
     options: Vec<String>,
@@ -230,9 +231,13 @@ fn load_extensions(
                 &extension_name, &base_object_name
             );
 
+            let base_module_name = naming::generate_base_module_identifier(base_object_name).to_string();
+
+
             specification_builder.push(TypeDescription {
                 schema: uri.clone(),
-                name_override: None,
+                module_path_override: Some(vec![base_module_name]),
+                name_override: Some(String::from("Extension")),
                 extension: Some(extension_name.clone()),
             });
         }
@@ -280,6 +285,7 @@ fn main() {
     );
     specification_builder.push(TypeDescription {
         schema: SchemaUri::from_str("glTF.schema.json"),
+        module_path_override: None,
         name_override: None,
         extension: None,
     });

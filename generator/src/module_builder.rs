@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use anyhow::Context;
 
@@ -8,11 +9,13 @@ use crate::schema_uri::SchemaUri;
 
 pub struct TypeDescription {
     pub schema: SchemaUri,
+    pub module_path_override: Option<Vec<String>>,
     pub name_override: Option<String>,
     pub extension: Option<String>,
 }
 
 pub struct ResolvedType {
+    pub module_path: Vec<String>,
     pub name: String,
     pub prototype: ObjectPrototype,
     pub extension: Option<String>,
@@ -21,7 +24,7 @@ pub struct ResolvedType {
 pub struct ModuleBuilder<'a> {
     pub output_base: String,
     pub name: String,
-    pub types: BTreeMap<SchemaUri, ResolvedType>,
+    pub types: BTreeMap<SchemaUri, Arc<ResolvedType>>,
     open_list: Vec<TypeDescription>,
     store: &'a SchemaStore,
     pub resolver: &'a SchemaResolver<'a>,
@@ -80,6 +83,7 @@ impl<'a> ModuleBuilder<'a> {
 
                 self.open_list.push(TypeDescription {
                     schema: schema.clone(),
+                    module_path_override: None,
                     name_override: None,
                     extension: None,
                 })
@@ -107,11 +111,13 @@ impl<'a> ModuleBuilder<'a> {
 
             self.types.insert(
                 ty.schema.clone(),
-                ResolvedType {
-                    name: ty.name_override.unwrap_or(object_type.name),
-                    prototype: object_type.prototype,
-                    extension: ty.extension,
-                },
+                Arc::new(
+                    ResolvedType {
+                        name: ty.name_override.unwrap_or(object_type.name),
+                        module_path: ty.module_path_override.unwrap_or(vec![]),
+                        prototype: object_type.prototype,
+                        extension: ty.extension,
+                    }),
             );
         }
     }
