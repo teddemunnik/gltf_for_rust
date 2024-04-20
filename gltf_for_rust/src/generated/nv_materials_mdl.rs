@@ -1,74 +1,106 @@
 #![allow(clippy::all, unused_imports)]
-pub mod gltf {
-    mod extension {
-        use serde::{Serialize, Deserialize};
-        use serde_json::{Map, Value};
-        #[derive(Serialize, Deserialize, Debug)]
-        ///glTF extension that enables using MDL materials.
-        pub struct Extension {
-            #[serde(default)]
-            ///JSON object with extension-specific objects.
-            pub extensions: Option<Map<String, Value>>,
-            #[serde(default)]
-            ///Application-specific data.
-            pub extras: Option<serde_json::Value>,
-            #[serde(rename = "bsdfMeasurements")]
-            #[serde(default)]
-            ///The list of all BSDF measurements.
-            pub bsdf_measurements: Vec<
-                crate::generated::nv_materials_mdl::BsdfMeasurement,
-            >,
-            #[serde(rename = "functionCalls")]
-            #[serde(default)]
-            ///The list of all function calls.
-            pub function_calls: Vec<crate::generated::nv_materials_mdl::FunctionCall>,
-            #[serde(default)]
-            ///The list of all MDL modules.
-            pub modules: Vec<crate::generated::nv_materials_mdl::Module>,
-        }
-        impl crate::GltfObject for Extension {
-            fn extensions(&self) -> &Option<Map<String, Value>> {
-                &self.extensions
-            }
-        }
+mod material_nv_materials_mdl {
+    use serde::{Serialize, Deserialize};
+    use serde_json::{Map, Value};
+    #[derive(Serialize, Deserialize, Debug)]
+    ///glTF extension that enables using MDL materials.
+    pub struct MaterialNvMaterialsMdl {
+        #[serde(default)]
+        ///JSON object with extension-specific objects.
+        pub extensions: Option<Map<String, Value>>,
+        #[serde(default)]
+        ///Application-specific data.
+        pub extras: Option<serde_json::Value>,
+        #[serde(rename = "functionCall")]
+        ///The index of the MDL function call. The reference function call **MUST** represent the entry point to a function call graph and have the return type `material`.
+        pub function_call: i64,
     }
-    pub use extension::Extension;
-    impl crate::GltfExtension for Extension {
+    impl crate::GltfExtension for MaterialNvMaterialsMdl {
         fn extension_name() -> &'static str {
             "NV_materials_mdl"
         }
     }
-}
-pub mod material {
-    mod extension {
-        use serde::{Serialize, Deserialize};
-        use serde_json::{Map, Value};
-        #[derive(Serialize, Deserialize, Debug)]
-        ///glTF extension that enables using MDL materials.
-        pub struct Extension {
-            #[serde(default)]
-            ///JSON object with extension-specific objects.
-            pub extensions: Option<Map<String, Value>>,
-            #[serde(default)]
-            ///Application-specific data.
-            pub extras: Option<serde_json::Value>,
-            #[serde(rename = "functionCall")]
-            ///The index of the MDL function call. The reference function call **MUST** represent the entry point to a function call graph and have the return type `material`.
-            pub function_call: i64,
-        }
-        impl crate::GltfObject for Extension {
-            fn extensions(&self) -> &Option<Map<String, Value>> {
-                &self.extensions
-            }
-        }
-    }
-    pub use extension::Extension;
-    impl crate::GltfExtension for Extension {
-        fn extension_name() -> &'static str {
-            "NV_materials_mdl"
+    impl crate::GltfObject for MaterialNvMaterialsMdl {
+        fn extensions(&self) -> &Option<Map<String, Value>> {
+            &self.extensions
         }
     }
 }
+pub use material_nv_materials_mdl::MaterialNvMaterialsMdl;
+mod function_call_argument {
+    use serde::{Serialize, Deserialize};
+    use serde_json::{Map, Value};
+    #[derive(Serialize, Deserialize, Debug)]
+    ///Named function call argument. Can be another function call or a constant value.
+    pub struct FunctionCallArgument {
+        #[serde(default)]
+        ///JSON object with extension-specific objects.
+        pub extensions: Option<Map<String, Value>>,
+        #[serde(default)]
+        ///Application-specific data.
+        pub extras: Option<serde_json::Value>,
+        #[serde(rename = "functionCall")]
+        #[serde(default)]
+        ///The ID of a function call.  This field **MUST NOT** be defined if `value` is defined.
+        pub function_call: Option<i64>,
+        #[serde(default)]
+        ///The name of the named argument.
+        pub name: Option<String>,
+        #[serde(rename = "type")]
+        #[serde(default)]
+        ///The type of the value argument.  This field **MUST** be defined if `value` is defined and **MUST NOT** be defined if `functionCall` is defined.
+        pub ty: Option<crate::generated::nv_materials_mdl::FunctionCallType>,
+        #[serde(default)]
+        ///The literal value of the value argument.  This field **MUST NOT** be defined if `functionCall` is defined.
+        pub value: Option<serde_json::Value>,
+    }
+    impl crate::GltfObject for FunctionCallArgument {
+        fn extensions(&self) -> &Option<Map<String, Value>> {
+            &self.extensions
+        }
+    }
+}
+pub use function_call_argument::FunctionCallArgument;
+mod function_call_type {
+    use serde::{Serialize, Deserialize};
+    use serde_json::{Map, Value};
+    #[derive(Serialize, Deserialize, Debug)]
+    pub enum Modifier {
+        #[serde(rename = "varying")]
+        Varying,
+        #[serde(rename = "uniform")]
+        Uniform,
+    }
+    #[derive(Serialize, Deserialize, Debug)]
+    ///MDL type describing either a built-in or user-defined type, or an array of a built-in or user-defined type.
+    pub struct FunctionCallType {
+        #[serde(default)]
+        ///JSON object with extension-specific objects.
+        pub extensions: Option<Map<String, Value>>,
+        #[serde(default)]
+        ///Application-specific data.
+        pub extras: Option<serde_json::Value>,
+        #[serde(rename = "arraySize")]
+        #[serde(default)]
+        ///The array size. If this field is defined the type is considered to be a array.
+        pub array_size: Option<i64>,
+        #[serde(default)]
+        ///The name of the type modifier.
+        pub modifier: Option<Modifier>,
+        #[serde(default)]
+        ///The ID of the containing module.  This field **MUST NOT** be defined if a built-in type is specified.
+        pub module: Option<i64>,
+        #[serde(rename = "typeName")]
+        ///The unqualified name of the type.
+        pub type_name: String,
+    }
+    impl crate::GltfObject for FunctionCallType {
+        fn extensions(&self) -> &Option<Map<String, Value>> {
+            &self.extensions
+        }
+    }
+}
+pub use function_call_type::FunctionCallType;
 mod module {
     use serde::{Serialize, Deserialize};
     use serde_json::{Map, Value};
@@ -112,6 +144,42 @@ mod module {
     }
 }
 pub use module::Module;
+mod gltf_nv_materials_mdl {
+    use serde::{Serialize, Deserialize};
+    use serde_json::{Map, Value};
+    #[derive(Serialize, Deserialize, Debug)]
+    ///glTF extension that enables using MDL materials.
+    pub struct GltfNvMaterialsMdl {
+        #[serde(default)]
+        ///JSON object with extension-specific objects.
+        pub extensions: Option<Map<String, Value>>,
+        #[serde(default)]
+        ///Application-specific data.
+        pub extras: Option<serde_json::Value>,
+        #[serde(rename = "bsdfMeasurements")]
+        #[serde(default)]
+        ///The list of all BSDF measurements.
+        pub bsdf_measurements: Vec<crate::generated::nv_materials_mdl::BsdfMeasurement>,
+        #[serde(rename = "functionCalls")]
+        #[serde(default)]
+        ///The list of all function calls.
+        pub function_calls: Vec<crate::generated::nv_materials_mdl::FunctionCall>,
+        #[serde(default)]
+        ///The list of all MDL modules.
+        pub modules: Vec<crate::generated::nv_materials_mdl::Module>,
+    }
+    impl crate::GltfExtension for GltfNvMaterialsMdl {
+        fn extension_name() -> &'static str {
+            "NV_materials_mdl"
+        }
+    }
+    impl crate::GltfObject for GltfNvMaterialsMdl {
+        fn extensions(&self) -> &Option<Map<String, Value>> {
+            &self.extensions
+        }
+    }
+}
+pub use gltf_nv_materials_mdl::GltfNvMaterialsMdl;
 mod function_call {
     use serde::{Serialize, Deserialize};
     use serde_json::{Map, Value};
@@ -147,80 +215,6 @@ mod function_call {
     }
 }
 pub use function_call::FunctionCall;
-mod function_call_type {
-    use serde::{Serialize, Deserialize};
-    use serde_json::{Map, Value};
-    #[derive(Serialize, Deserialize, Debug)]
-    pub enum Modifier {
-        #[serde(rename = "varying")]
-        Varying,
-        #[serde(rename = "uniform")]
-        Uniform,
-    }
-    #[derive(Serialize, Deserialize, Debug)]
-    ///MDL type describing either a built-in or user-defined type, or an array of a built-in or user-defined type.
-    pub struct FunctionCallType {
-        #[serde(default)]
-        ///JSON object with extension-specific objects.
-        pub extensions: Option<Map<String, Value>>,
-        #[serde(default)]
-        ///Application-specific data.
-        pub extras: Option<serde_json::Value>,
-        #[serde(rename = "arraySize")]
-        #[serde(default)]
-        ///The array size. If this field is defined the type is considered to be a array.
-        pub array_size: Option<i64>,
-        #[serde(default)]
-        ///The name of the type modifier.
-        pub modifier: Option<Modifier>,
-        #[serde(default)]
-        ///The ID of the containing module.  This field **MUST NOT** be defined if a built-in type is specified.
-        pub module: Option<i64>,
-        #[serde(rename = "typeName")]
-        ///The unqualified name of the type.
-        pub type_name: String,
-    }
-    impl crate::GltfObject for FunctionCallType {
-        fn extensions(&self) -> &Option<Map<String, Value>> {
-            &self.extensions
-        }
-    }
-}
-pub use function_call_type::FunctionCallType;
-mod function_call_argument {
-    use serde::{Serialize, Deserialize};
-    use serde_json::{Map, Value};
-    #[derive(Serialize, Deserialize, Debug)]
-    ///Named function call argument. Can be another function call or a constant value.
-    pub struct FunctionCallArgument {
-        #[serde(default)]
-        ///JSON object with extension-specific objects.
-        pub extensions: Option<Map<String, Value>>,
-        #[serde(default)]
-        ///Application-specific data.
-        pub extras: Option<serde_json::Value>,
-        #[serde(rename = "functionCall")]
-        #[serde(default)]
-        ///The ID of a function call.  This field **MUST NOT** be defined if `value` is defined.
-        pub function_call: Option<i64>,
-        #[serde(default)]
-        ///The name of the named argument.
-        pub name: Option<String>,
-        #[serde(rename = "type")]
-        #[serde(default)]
-        ///The type of the value argument.  This field **MUST** be defined if `value` is defined and **MUST NOT** be defined if `functionCall` is defined.
-        pub ty: Option<crate::generated::nv_materials_mdl::FunctionCallType>,
-        #[serde(default)]
-        ///The literal value of the value argument.  This field **MUST NOT** be defined if `functionCall` is defined.
-        pub value: Option<serde_json::Value>,
-    }
-    impl crate::GltfObject for FunctionCallArgument {
-        fn extensions(&self) -> &Option<Map<String, Value>> {
-            &self.extensions
-        }
-    }
-}
-pub use function_call_argument::FunctionCallArgument;
 mod bsdf_measurement {
     use serde::{Serialize, Deserialize};
     use serde_json::{Map, Value};
